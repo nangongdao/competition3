@@ -1,0 +1,9 @@
+name = "ai-visual-dialogue-assistant"
+main = "src/worker/index.ts"
+compatibility_date = "2026-06-12"
+compatibility_flags = ["nodejs_compat"]
+
+assets = { directory = "./dist", binding = "ASSETS", not_found_handling = "single-page-application" }
+
+[vars]
+ENVIRONMENT = "development"
