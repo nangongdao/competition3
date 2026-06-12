@@ -12,6 +12,7 @@
 | [code-quality.md](./code-quality.md)               | Code quality mandatory rules              | Always                     |
 | [typescript.md](./typescript.md)                   | TypeScript best practices                 | Type-related decisions     |
 | [timestamp.md](./timestamp.md)                     | Timestamp format specification            | Date/time handling         |
+| [pr-workflow.md](./pr-workflow.md)                 | Competition PR and commit workflow        | Before every task handoff  |
 
 ---
 
@@ -20,6 +21,7 @@
 | Task                        | File                                               |
 | --------------------------- | -------------------------------------------------- |
 | **Dependency versions**     | [dependency-versions.md](./dependency-versions.md) |
+| PR and commit workflow      | [pr-workflow.md](./pr-workflow.md)                 |
 | Code quality rules          | [code-quality.md](./code-quality.md)               |
 | Type annotations            | [typescript.md](./typescript.md)                   |
 | Timestamp handling          | [timestamp.md](./timestamp.md)                     |
@@ -36,6 +38,7 @@
 | No non-null assertions (`!`)             | [code-quality.md](./code-quality.md)               |
 | Use explicit type annotations            | [typescript.md](./typescript.md)                   |
 | Use Unix milliseconds for timestamps     | [timestamp.md](./timestamp.md)                     |
+| Use task branches and PRs for delivery   | [pr-workflow.md](./pr-workflow.md)                 |
 
 ---
 
@@ -46,6 +49,7 @@
 - [ ] No non-null assertions (`!`)
 - [ ] Tests pass (if applicable)
 - [ ] Dependency versions match constraints in [dependency-versions.md](./dependency-versions.md)
+- [ ] Task branch is ready to push and open as a PR to `main`
 
 ---
 
@@ -56,6 +60,7 @@
 - [ ] Naming follows conventions
 - [ ] No duplicate code
 - [ ] Dependencies use correct versions
+- [ ] PR title and description match the actual diff
 - [ ] Tailwind v4 color mappings present if using shadcn (see [dependency-versions.md](./dependency-versions.md#tailwind-css-v4-gotchas))
 
 ---

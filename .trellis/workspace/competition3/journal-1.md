@@ -40,3 +40,36 @@ Implemented the Vite React frontend, Cloudflare Worker realtime session endpoint
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: Document PR workflow requirements
+
+**Date**: 2026-06-12
+**Task**: Document PR workflow requirements
+**Branch**: `docs/pr-workflow-requirements`
+
+### Summary
+
+Documented competition pull request requirements in AGENTS.md and Trellis shared specs, including branch, PR description, verification, and fallback guidance for gh pr creation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f982cc0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
