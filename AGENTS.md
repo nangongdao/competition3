@@ -36,3 +36,5 @@ documentation, or build changes, read `task.md` and follow its delivery rules.
   change description, implementation approach, and verification/testing method.
 - If new third-party libraries or frameworks are introduced, list them in
   `README.md` and clarify which parts are original project work.
+- For Git pull/push/PR troubleshooting, follow
+  `.trellis/spec/shared/pr-workflow.md` before retrying commands repeatedly.

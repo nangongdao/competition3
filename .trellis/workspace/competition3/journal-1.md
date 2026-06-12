@@ -73,3 +73,36 @@ Documented competition pull request requirements in AGENTS.md and Trellis shared
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Document git sync and gh fallback lessons
+
+**Date**: 2026-06-12
+**Task**: Document git sync and gh fallback lessons
+**Branch**: `docs/pr-workflow-requirements`
+
+### Summary
+
+Captured Git pull semantics, repository sync checks, push failure diagnosis, gh fallback commands, and API-created branch cautions in local PR workflow documentation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c648971` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
