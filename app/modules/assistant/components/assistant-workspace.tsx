@@ -5,7 +5,9 @@ import {
   CircleStop,
   Gauge,
   Image as ImageIcon,
+  Hand,
   Mic,
+  MicOff,
   Play,
   Radio,
   RefreshCcw,
@@ -36,6 +38,7 @@ import type {
   TranscriptEntry,
   TranscriptSpeaker,
 } from "@/modules/assistant/types";
+import type { RealtimeTurnDetectionMode } from "../../../../src/worker/routes/realtime/types";
 
 const initialTranscript: readonly TranscriptEntry[] = [
   {
@@ -78,6 +81,25 @@ const realtimeLabels: Record<RealtimeConnectionStatus, string> = {
   connected: "Connected",
   error: "Error",
 };
+
+const turnDetectionLabels: Record<RealtimeTurnDetectionMode, string> = {
+  "server-vad": "Server VAD",
+  "push-to-talk": "Push-to-talk",
+};
+
+const turnDetectionOptions: readonly {
+  value: RealtimeTurnDetectionMode;
+  label: string;
+}[] = [
+  {
+    value: "server-vad",
+    label: "Server VAD",
+  },
+  {
+    value: "push-to-talk",
+    label: "Push-to-talk",
+  },
+] as const;
 
 function formatEntryTime(timestamp: number): string {
   return new Intl.DateTimeFormat("en", {
@@ -126,6 +148,8 @@ export function AssistantWorkspace(): React.JSX.Element {
   const [isAutoSampling, setIsAutoSampling] = useState(false);
   const [samplingIntervalSeconds, setSamplingIntervalSeconds] = useState(8);
   const [isFramePruningEnabled, setIsFramePruningEnabled] = useState(true);
+  const [turnDetectionMode, setTurnDetectionMode] =
+    useState<RealtimeTurnDetectionMode>("server-vad");
   const [textDraft, setTextDraft] = useState("");
   const nextEntryIdRef = useRef(initialTranscript.length);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -167,6 +191,11 @@ export function AssistantWorkspace(): React.JSX.Element {
     stopSession: stopRealtimeSession,
     sendVisualContext,
     sendTextMessage,
+    isMicrophoneMuted,
+    isPushToTalkActive,
+    setMicrophoneMuted,
+    startPushToTalk,
+    stopPushToTalk,
   } = useRealtimeSession({
     stream,
     onTranscript: addTranscript,
@@ -175,6 +204,18 @@ export function AssistantWorkspace(): React.JSX.Element {
   });
 
   const hasRealtimeConnection = realtimeState.status === "connected";
+  const activeTurnDetectionMode =
+    realtimeState.costPolicy?.turnDetectionMode ?? turnDetectionMode;
+  const isPushToTalkMode = activeTurnDetectionMode === "push-to-talk";
+  const microphoneStatusLabel = !hasMedia
+    ? "Mic off"
+    : isMicrophoneMuted
+      ? "Mic muted"
+      : isPushToTalkMode
+        ? isPushToTalkActive
+          ? "PTT live"
+          : "PTT idle"
+        : "Mic armed";
   const costControls: readonly CostControlSetting[] = [
     {
       label: "Frame budget",
@@ -194,6 +235,21 @@ export function AssistantWorkspace(): React.JSX.Element {
       label: "Cloud key",
       value: "server",
       detail: "Permanent model keys stay in the Worker.",
+    },
+    {
+      label: "Voice turn",
+      value: turnDetectionLabels[activeTurnDetectionMode],
+      detail:
+        activeTurnDetectionMode === "push-to-talk"
+          ? "Audio turns are committed only from the hold control."
+          : "Server VAD can answer hands-free speech.",
+    },
+    {
+      label: "Microphone",
+      value: microphoneStatusLabel,
+      detail: isMicrophoneMuted
+        ? "The local audio track is disabled."
+        : "The local audio track follows the active turn mode.",
     },
     {
       label: "Auto diff",
@@ -404,6 +460,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     lastUploadedFrameSignatureRef.current = null;
     setSentFrameCount(0);
     setSkippedAutoFrameCount(0);
+    setMicrophoneMuted(false);
     addTranscript("system", "Camera and microphone tracks were released.");
   };
 
@@ -420,6 +477,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     setSkippedAutoFrameCount(0);
     void startRealtimeSession({
       visualContextMode: isAutoSampling ? "interval" : "manual",
+      turnDetectionMode,
       instructions:
         "You are a concise visual dialogue assistant. Use microphone audio for conversation and use sampled camera frames only when the client sends them.",
     });
@@ -485,6 +543,22 @@ export function AssistantWorkspace(): React.JSX.Element {
     setIsFramePruningEnabled(event.currentTarget.checked);
   };
 
+  const handleTurnDetectionModeChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): void => {
+    const nextMode = event.currentTarget.value;
+
+    if (nextMode === "server-vad" || nextMode === "push-to-talk") {
+      setTurnDetectionMode(nextMode);
+    }
+  };
+
+  const handleMicrophoneMutedChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): void => {
+    setMicrophoneMuted(event.currentTarget.checked);
+  };
+
   const handleTextDraftChange = (
     event: React.ChangeEvent<HTMLInputElement>,
   ): void => {
@@ -521,6 +595,54 @@ export function AssistantWorkspace(): React.JSX.Element {
     setTextDraft("");
   };
 
+  const handlePushToTalkPointerDown = (
+    event: React.PointerEvent<HTMLButtonElement>,
+  ): void => {
+    if (!canPushToTalk) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    startPushToTalk();
+  };
+
+  const handlePushToTalkPointerEnd = (
+    event: React.PointerEvent<HTMLButtonElement>,
+  ): void => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    stopPushToTalk();
+  };
+
+  const handlePushToTalkKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+  ): void => {
+    if (
+      event.repeat ||
+      !canPushToTalk ||
+      (event.key !== " " && event.key !== "Enter")
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    startPushToTalk();
+  };
+
+  const handlePushToTalkKeyUp = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+  ): void => {
+    if (event.key !== " " && event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+    stopPushToTalk();
+  };
+
   const handleSamplingIntervalChange = (
     event: React.ChangeEvent<HTMLInputElement>,
   ): void => {
@@ -533,7 +655,17 @@ export function AssistantWorkspace(): React.JSX.Element {
     realtimeState.status !== "creating-session" &&
     realtimeState.status !== "connecting" &&
     !hasRealtimeConnection;
+  const canChangeTurnMode =
+    !hasActiveSession &&
+    realtimeState.status !== "creating-session" &&
+    realtimeState.status !== "connecting" &&
+    !hasRealtimeConnection;
   const canRealtimeTurn = assistantPhase === "listening" && hasRealtimeConnection;
+  const canPushToTalk =
+    assistantPhase === "listening" &&
+    hasRealtimeConnection &&
+    isPushToTalkMode &&
+    !isMicrophoneMuted;
   const canStopSession =
     hasActiveSession ||
     hasRealtimeConnection ||
@@ -609,6 +741,22 @@ export function AssistantWorkspace(): React.JSX.Element {
           </button>
 
           <button
+            className="control-button ptt"
+            type="button"
+            data-active={isPushToTalkActive ? "true" : "false"}
+            onPointerDown={handlePushToTalkPointerDown}
+            onPointerUp={handlePushToTalkPointerEnd}
+            onPointerCancel={handlePushToTalkPointerEnd}
+            onKeyDown={handlePushToTalkKeyDown}
+            onKeyUp={handlePushToTalkKeyUp}
+            disabled={!canPushToTalk}
+            aria-pressed={isPushToTalkActive}
+          >
+            <Hand size={18} aria-hidden="true" />
+            <span>{isPushToTalkActive ? "Speaking" : "Hold to talk"}</span>
+          </button>
+
+          <button
             className="control-button"
             type="button"
             onClick={handleRealtimeTurn}
@@ -665,6 +813,36 @@ export function AssistantWorkspace(): React.JSX.Element {
               </div>
             ))}
           </dl>
+
+          <div className="voice-controls" aria-label="Voice input settings">
+            <fieldset className="mode-segment" disabled={!canChangeTurnMode}>
+              <legend>Turn mode</legend>
+              <div>
+                {turnDetectionOptions.map((option) => (
+                  <label key={option.value}>
+                    <input
+                      type="radio"
+                      name="turn-detection-mode"
+                      value={option.value}
+                      checked={turnDetectionMode === option.value}
+                      onChange={handleTurnDetectionModeChange}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={isMicrophoneMuted}
+                onChange={handleMicrophoneMutedChange}
+                disabled={!hasMedia}
+              />
+              <span>{isMicrophoneMuted ? "Microphone muted" : "Microphone live"}</span>
+            </label>
+          </div>
 
           <div className="sampling-controls" aria-label="Frame sampling settings">
             <label className="toggle-row">
@@ -793,8 +971,12 @@ export function AssistantWorkspace(): React.JSX.Element {
               {hasMedia ? "Camera live" : "Camera off"}
             </span>
             <span>
-              <Mic size={15} aria-hidden="true" />
-              {hasMedia ? "Mic armed" : "Mic off"}
+              {isMicrophoneMuted ? (
+                <MicOff size={15} aria-hidden="true" />
+              ) : (
+                <Mic size={15} aria-hidden="true" />
+              )}
+              {microphoneStatusLabel}
             </span>
           </div>
 

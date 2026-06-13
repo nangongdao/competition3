@@ -94,6 +94,7 @@ Request JSON:
 | --- | --- | :---: | --- |
 | `instructions` | `string` | No | Trimmed, 1 to 1200 chars when present |
 | `visualContextMode` | `"manual" \| "interval"` | No | Defaults to `"manual"` |
+| `turnDetectionMode` | `"server-vad" \| "push-to-talk"` | No | Defaults to `"server-vad"`; push-to-talk maps to `turn_detection: null` upstream |
 
 Success response:
 
@@ -103,6 +104,7 @@ Success response:
   session: unknown,
   costPolicy: {
     visualContextMode: "manual" | "interval",
+    turnDetectionMode: "server-vad" | "push-to-talk",
     maxSessionSeconds: number,
     frameUpload: "manual-or-interval",
   },
@@ -124,6 +126,7 @@ Environment:
 | Missing `OPENAI_API_KEY` | 503 | `{ success: false, code: "missing_openai_api_key" }` |
 | Invalid JSON | 400 | Global `HTTPException` error response |
 | Zod validation failure | 400 | `{ success: false, code: "invalid_request" }` |
+| Invalid `turnDetectionMode` | 400 | `{ success: false, code: "invalid_request" }` |
 | Provider session creation failure | 502 | `{ success: false, code: "openai_session_failed" }` |
 | Provider success | 200 | `{ success: true, session, costPolicy }` |
 
@@ -140,6 +143,9 @@ Environment:
 - Typecheck verifies `CloudflareBindings` includes the session env keys.
 - Unit or integration test should assert missing key returns 503.
 - Contract test should assert invalid `visualContextMode` returns 400.
+- Contract test should assert invalid `turnDetectionMode` returns 400.
+- Mocked provider test should assert push-to-talk writes
+  `turn_detection: null` and default server VAD omits that override.
 - Mocked provider test should assert upstream failures map to 502.
 - Browser smoke test should confirm local media/mock mode still works when the
   session endpoint is not configured.

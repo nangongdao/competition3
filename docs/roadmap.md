@@ -51,7 +51,8 @@ useless input, then cap output, then write down the measured results.**
 | #2 | `feat/text-input-dialogue` | Text message composer over the Realtime data channel | open, stacked base |
 | #3 | `feat/realtime-usage-cost-meter` | Usage meter: parses `response.done` usage into modality buckets, USD estimate, last-turn input (snowball indicator); 12 unit tests | open, stacked on #2 |
 | #4 | `feat/history-frame-pruning` | History frame pruning: consumed frame items deleted via `conversation.item.delete` (pending -> in-flight -> consumed tracker, `evt_prune_` tagged deletes, silenced races); toggle + pruned counter; 10 unit tests | open, stacked on #3 |
-| pending | `feat/frame-difference-sampling` | Frame-difference sampling: downscaled luma diff skips low-change interval uploads, manual frame actions bypass the gate, sent/skipped counters show savings; 8 unit tests | in progress |
+| #6 | `feat/frame-difference-sampling` | Frame-difference sampling: downscaled luma diff skips low-change interval uploads, manual frame actions bypass the gate, sent/skipped counters show savings; 8 unit tests | open, stacked on #5 |
+| pending | `feat/push-to-talk-microphone-mute` | Push-to-talk and microphone mute: session-level turn detection mode, PTT audio buffer commit, live `MediaStreamTrack.enabled` mute, Worker payload mapping tests | in progress |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission
@@ -65,7 +66,7 @@ session cap, key-safe server-side session creation.
 Ordered by leverage. Each entry lists the method concretely enough that a
 future session can implement it without re-deriving the design.
 
-### 3.1 Frame-difference sampling (in progress)
+### 3.1 Frame-difference sampling (shipped)
 
 *Cost lever: stop uploading frames that carry no new information.*
 
@@ -90,7 +91,7 @@ future session can implement it without re-deriving the design.
   scene change); manual A/B with a static scene — skipped count should
   dominate; usage meter image-input bucket grows slower with diff on.
 
-### 3.2 Push-to-talk and microphone mute (planned)
+### 3.2 Push-to-talk and microphone mute (in progress)
 
 *Cost lever: eliminate VAD false-positive turns in noisy environments.*
 
@@ -107,6 +108,10 @@ future session can implement it without re-deriving the design.
     `input_audio_buffer.commit` + `response.create` over the data channel.
   * Independent mute toggle: `audioTrack.enabled = false` — no renegotiation
     needed, works in both modes.
+* **Current implementation**: the browser exposes a locked-per-session turn
+  mode selector, a live mute toggle, and a hold control that arms the audio
+  track only while active. Push-to-talk releases send
+  `input_audio_buffer.commit` and then `response.create`.
 * **Verification**: worker test for the new schema field and payload
   mapping; manual check that no `input_audio_buffer.speech_started`
   events arrive while muted/not holding; usage meter audio-input bucket

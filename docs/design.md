@@ -34,6 +34,8 @@ server side.
 | Sample visual context frames | Implemented | Manual sampling and low-frequency interval controls capture JPEG frames to canvas. |
 | Create a key-safe AI session | Implemented | `POST /api/realtime/session` creates a server-side Realtime session when `OPENAI_API_KEY` is configured. |
 | Stream low-latency voice to the model | Implemented | The browser posts an SDP offer with the short-lived client secret and plays the remote audio stream. |
+| Avoid noisy-room voice false positives | Implemented | The session can run in push-to-talk mode, which disables server VAD and commits audio only after the user releases the hold control. |
+| Mute the microphone during a live session | Implemented | The workspace toggles the local audio track with `MediaStreamTrack.enabled` without renegotiating WebRTC. |
 | Send sampled frames into model context | Implemented | Manual and interval samples are sent as `conversation.item.create` data-channel events. |
 | Type a text message during a session | Implemented | A composer in the dialogue board sends text-only conversation items over the data channel and requests a response. |
 | See real token usage and estimated cost per session | Implemented | The usage meter parses authoritative `response.done` usage events into modality buckets with a USD estimate. |
@@ -95,8 +97,14 @@ image in 5, text in 4, text out 16, cached in 0.4):
   uploaded frame. Frames below the 4% mean luma-change threshold update the
   skipped counter but are not sent to the Realtime data channel; manual
   `Sample frame` and `Ask with frame` actions always bypass the gate.
-* **Push-to-talk mode (planned)**: disable server VAD and commit the audio
-  buffer manually so noisy environments cannot trigger billable false turns.
+* **Push-to-talk mode (implemented)**: session creation accepts
+  `turnDetectionMode: "server-vad" | "push-to-talk"`. Push-to-talk maps to
+  `turn_detection: null`, keeps the local audio track disabled while idle, and
+  sends `input_audio_buffer.commit` plus `response.create` on release so noisy
+  environments cannot trigger billable false turns.
+* **Microphone mute (implemented)**: an independent toggle sets
+  `MediaStreamTrack.enabled = false` in both turn modes. In push-to-talk mode,
+  mute also prevents the hold control from arming audio.
 * **Response budget (planned)**: `max_response_output_tokens` presets and an
   optional text-only response mode (audio out is 4x text out).
 * **Idle auto-disconnect (planned)**: close the session after a period with
