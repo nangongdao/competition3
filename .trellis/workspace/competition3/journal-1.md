@@ -479,3 +479,37 @@ Localized the assistant workspace to Chinese by default, updated design and road
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: Third-party Realtime provider configuration
+
+**Date**: 2026-06-13
+**Task**: Third-party Realtime provider configuration
+**Branch**: `feat/third-party-realtime-provider`
+
+### Summary
+
+Added configurable Realtime provider endpoints, Worker-provided WebRTC URL contract, startup script, provider requirements documentation, and tests for default/third-party URL mapping.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `79e7ab0` | (see git log) |
+| `4e81d70` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
