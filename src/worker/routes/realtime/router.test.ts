@@ -107,6 +107,28 @@ describe("realtime session route", () => {
     expect(body.code).toBe("invalid_request");
   });
 
+  it("returns 400 for invalid response budget", async () => {
+    const response = await app.request(
+      "/api/realtime/session",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          visualContextMode: "manual",
+          responseBudget: "unbounded",
+        }),
+      },
+      createEnv({ OPENAI_API_KEY: "sk-test" }),
+    );
+    const body = await readJson<ApiErrorResponse>(response);
+
+    expect(response.status).toBe(400);
+    expect(body.success).toBe(false);
+    expect(body.code).toBe("invalid_request");
+  });
+
   it("maps upstream OpenAI failures to 502", async () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -191,6 +213,8 @@ describe("realtime session route", () => {
     expect(body.success).toBe(true);
     expect(body.costPolicy.visualContextMode).toBe("interval");
     expect(body.costPolicy.turnDetectionMode).toBe("server-vad");
+    expect(body.costPolicy.responseBudget).toBe("standard");
+    expect(body.costPolicy.maxResponseOutputTokens).toBe(800);
     expect(body.costPolicy.maxSessionSeconds).toBe(600);
     expect(body.costPolicy.frameUpload).toBe("manual-or-interval");
 
@@ -203,6 +227,122 @@ describe("realtime session route", () => {
 
     const upstreamBody = readMockRequestJson(firstCall[1]);
     expect(upstreamBody.turn_detection).toBeUndefined();
+    expect(upstreamBody.max_response_output_tokens).toBe(800);
+  });
+
+  it("maps brief budget to a short output cap and brevity instruction", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        void input;
+        void init;
+
+        return new Response(
+          JSON.stringify({
+            id: "sess_test",
+            model: "gpt-realtime",
+            client_secret: {
+              value: "ek_test",
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/realtime/session",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          visualContextMode: "manual",
+          responseBudget: "brief",
+          instructions: "Answer from the live camera context.",
+        }),
+      },
+      createEnv({ OPENAI_API_KEY: "sk-test" }),
+    );
+    const body = await readJson<RealtimeSessionSuccessResponse>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.costPolicy.responseBudget).toBe("brief");
+    expect(body.costPolicy.maxResponseOutputTokens).toBe(300);
+
+    const firstCall = fetchMock.mock.calls[0];
+    if (firstCall === undefined) {
+      throw new Error("Expected upstream fetch to be called.");
+    }
+
+    const upstreamBody = readMockRequestJson(firstCall[1]);
+    expect(upstreamBody.max_response_output_tokens).toBe(300);
+    expect(upstreamBody.instructions).toContain(
+      "Answer from the live camera context.",
+    );
+    expect(upstreamBody.instructions).toContain("Keep each answer brief");
+  });
+
+  it("maps detailed budget to the largest output cap", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        void input;
+        void init;
+
+        return new Response(
+          JSON.stringify({
+            id: "sess_test",
+            model: "gpt-realtime",
+            client_secret: {
+              value: "ek_test",
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/realtime/session",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          visualContextMode: "manual",
+          responseBudget: "detailed",
+        }),
+      },
+      createEnv({ OPENAI_API_KEY: "sk-test" }),
+    );
+    const body = await readJson<RealtimeSessionSuccessResponse>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.costPolicy.responseBudget).toBe("detailed");
+    expect(body.costPolicy.maxResponseOutputTokens).toBe(1600);
+
+    const firstCall = fetchMock.mock.calls[0];
+    if (firstCall === undefined) {
+      throw new Error("Expected upstream fetch to be called.");
+    }
+
+    const upstreamBody = readMockRequestJson(firstCall[1]);
+    expect(upstreamBody.max_response_output_tokens).toBe(1600);
   });
 
   it("maps push-to-talk mode to disabled upstream turn detection", async () => {

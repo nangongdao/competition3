@@ -19,7 +19,10 @@ import {
 } from "lucide-react";
 
 import { useMediaCapture } from "@/modules/assistant/hooks/use-media-capture";
-import { useRealtimeSession } from "@/modules/assistant/hooks/use-realtime-session";
+import {
+  type RealtimeResponseMode,
+  useRealtimeSession,
+} from "@/modules/assistant/hooks/use-realtime-session";
 import {
   formatTokens,
   formatUsd,
@@ -38,7 +41,10 @@ import type {
   TranscriptEntry,
   TranscriptSpeaker,
 } from "@/modules/assistant/types";
-import type { RealtimeTurnDetectionMode } from "../../../../src/worker/routes/realtime/types";
+import type {
+  RealtimeResponseBudget,
+  RealtimeTurnDetectionMode,
+} from "../../../../src/worker/routes/realtime/types";
 
 const initialTranscript: readonly TranscriptEntry[] = [
   {
@@ -101,6 +107,35 @@ const turnDetectionOptions: readonly {
   },
 ] as const;
 
+const responseBudgetLabels: Record<RealtimeResponseBudget, string> = {
+  brief: "Brief",
+  standard: "Standard",
+  detailed: "Detailed",
+};
+
+const responseBudgetOptions: readonly {
+  value: RealtimeResponseBudget;
+  label: string;
+}[] = [
+  {
+    value: "brief",
+    label: "Brief",
+  },
+  {
+    value: "standard",
+    label: "Standard",
+  },
+  {
+    value: "detailed",
+    label: "Detailed",
+  },
+] as const;
+
+const responseModeLabels: Record<RealtimeResponseMode, string> = {
+  "audio-text": "Audio + text",
+  "text-only": "Text only",
+};
+
 function formatEntryTime(timestamp: number): string {
   return new Intl.DateTimeFormat("en", {
     hour: "2-digit",
@@ -150,6 +185,10 @@ export function AssistantWorkspace(): React.JSX.Element {
   const [isFramePruningEnabled, setIsFramePruningEnabled] = useState(true);
   const [turnDetectionMode, setTurnDetectionMode] =
     useState<RealtimeTurnDetectionMode>("server-vad");
+  const [responseBudget, setResponseBudget] =
+    useState<RealtimeResponseBudget>("standard");
+  const [responseMode, setResponseMode] =
+    useState<RealtimeResponseMode>("audio-text");
   const [textDraft, setTextDraft] = useState("");
   const nextEntryIdRef = useRef(initialTranscript.length);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -201,11 +240,14 @@ export function AssistantWorkspace(): React.JSX.Element {
     onTranscript: addTranscript,
     onPhaseChange: handleRealtimePhaseChange,
     pruneConsumedFrames: isFramePruningEnabled,
+    responseMode,
   });
 
   const hasRealtimeConnection = realtimeState.status === "connected";
   const activeTurnDetectionMode =
     realtimeState.costPolicy?.turnDetectionMode ?? turnDetectionMode;
+  const activeResponseBudget =
+    realtimeState.costPolicy?.responseBudget ?? responseBudget;
   const isPushToTalkMode = activeTurnDetectionMode === "push-to-talk";
   const microphoneStatusLabel = !hasMedia
     ? "Mic off"
@@ -230,6 +272,23 @@ export function AssistantWorkspace(): React.JSX.Element {
         ? `${Math.round(realtimeState.costPolicy.maxSessionSeconds / 60)} min`
         : "10 min",
       detail: "The browser closes long Realtime sessions automatically.",
+    },
+    {
+      label: "Response cap",
+      value: realtimeState.costPolicy
+        ? `${responseBudgetLabels[activeResponseBudget]} / ${formatTokens(
+            realtimeState.costPolicy.maxResponseOutputTokens,
+          )}`
+        : responseBudgetLabels[activeResponseBudget],
+      detail: "The Worker caps max response output tokens.",
+    },
+    {
+      label: "Response mode",
+      value: responseModeLabels[responseMode],
+      detail:
+        responseMode === "text-only"
+          ? "Responses skip assistant audio output."
+          : "Responses include assistant audio and transcript text.",
     },
     {
       label: "Cloud key",
@@ -478,6 +537,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     void startRealtimeSession({
       visualContextMode: isAutoSampling ? "interval" : "manual",
       turnDetectionMode,
+      responseBudget,
       instructions:
         "You are a concise visual dialogue assistant. Use microphone audio for conversation and use sampled camera frames only when the client sends them.",
     });
@@ -551,6 +611,26 @@ export function AssistantWorkspace(): React.JSX.Element {
     if (nextMode === "server-vad" || nextMode === "push-to-talk") {
       setTurnDetectionMode(nextMode);
     }
+  };
+
+  const handleResponseBudgetChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): void => {
+    const nextBudget = event.currentTarget.value;
+
+    if (
+      nextBudget === "brief" ||
+      nextBudget === "standard" ||
+      nextBudget === "detailed"
+    ) {
+      setResponseBudget(nextBudget);
+    }
+  };
+
+  const handleResponseModeChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): void => {
+    setResponseMode(event.currentTarget.checked ? "text-only" : "audio-text");
   };
 
   const handleMicrophoneMutedChange = (
@@ -660,6 +740,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     realtimeState.status !== "creating-session" &&
     realtimeState.status !== "connecting" &&
     !hasRealtimeConnection;
+  const canChangeResponseBudget = canChangeTurnMode;
   const canRealtimeTurn = assistantPhase === "listening" && hasRealtimeConnection;
   const canPushToTalk =
     assistantPhase === "listening" &&
@@ -841,6 +922,39 @@ export function AssistantWorkspace(): React.JSX.Element {
                 disabled={!hasMedia}
               />
               <span>{isMicrophoneMuted ? "Microphone muted" : "Microphone live"}</span>
+            </label>
+          </div>
+
+          <div className="response-controls" aria-label="Response output settings">
+            <fieldset className="mode-segment" disabled={!canChangeResponseBudget}>
+              <legend>Response budget</legend>
+              <div>
+                {responseBudgetOptions.map((option) => (
+                  <label key={option.value}>
+                    <input
+                      type="radio"
+                      name="response-budget"
+                      value={option.value}
+                      checked={responseBudget === option.value}
+                      onChange={handleResponseBudgetChange}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={responseMode === "text-only"}
+                onChange={handleResponseModeChange}
+              />
+              <span>
+                {responseMode === "text-only"
+                  ? "Text-only responses"
+                  : "Audio + text responses"}
+              </span>
             </label>
           </div>
 

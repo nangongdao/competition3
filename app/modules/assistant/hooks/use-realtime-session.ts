@@ -29,6 +29,7 @@ import type {
 import type {
   ApiErrorResponse,
   RealtimeCostPolicy,
+  RealtimeResponseBudget,
   RealtimeSessionSuccessResponse,
   RealtimeTurnDetectionMode,
 } from "../../../../src/worker/routes/realtime/types";
@@ -39,9 +40,12 @@ const DEFAULT_TURN_DETECTION_MODE: RealtimeTurnDetectionMode = "server-vad";
 const DATA_CHANNEL_LABEL = "oai-events";
 const DATA_CHANNEL_OPEN_TIMEOUT_MS = 15_000;
 
+export type RealtimeResponseMode = "audio-text" | "text-only";
+
 type StartRealtimeSessionInput = {
   visualContextMode: RealtimeCostPolicy["visualContextMode"];
   turnDetectionMode: RealtimeTurnDetectionMode;
+  responseBudget: RealtimeResponseBudget;
   instructions?: string;
 };
 
@@ -64,6 +68,8 @@ type UseRealtimeSessionOptions = {
   onPhaseChange: (phase: AssistantPhase) => void;
   /** When true, consumed image frames are deleted from server history. */
   pruneConsumedFrames: boolean;
+  /** Controls the modalities requested by each response.create event. */
+  responseMode: RealtimeResponseMode;
 };
 
 type UseRealtimeSessionResult = {
@@ -104,7 +110,7 @@ type RealtimeConversationItemCreateEvent = {
 type RealtimeResponseCreateEvent = {
   type: "response.create";
   response: {
-    modalities: ["audio", "text"];
+    modalities: ["audio", "text"] | ["text"];
   };
 };
 
@@ -183,6 +189,10 @@ function isRealtimeCostPolicy(value: unknown): value is RealtimeCostPolicy {
       value.visualContextMode === "interval") &&
     (value.turnDetectionMode === "server-vad" ||
       value.turnDetectionMode === "push-to-talk") &&
+    (value.responseBudget === "brief" ||
+      value.responseBudget === "standard" ||
+      value.responseBudget === "detailed") &&
+    typeof value.maxResponseOutputTokens === "number" &&
     typeof value.maxSessionSeconds === "number" &&
     value.frameUpload === "manual-or-interval"
   );
@@ -228,6 +238,7 @@ async function createRealtimeSession(
   const requestBody: StartRealtimeSessionInput = {
     visualContextMode: input.visualContextMode,
     turnDetectionMode: input.turnDetectionMode,
+    responseBudget: input.responseBudget,
   };
 
   if (input.instructions !== undefined) {
@@ -360,11 +371,13 @@ function buildTextConversationEvent(
   };
 }
 
-function buildResponseCreateEvent(): RealtimeResponseCreateEvent {
+export function buildResponseCreateEvent(
+  responseMode: RealtimeResponseMode,
+): RealtimeResponseCreateEvent {
   return {
     type: "response.create",
     response: {
-      modalities: ["audio", "text"],
+      modalities: responseMode === "text-only" ? ["text"] : ["audio", "text"],
     },
   };
 }
@@ -380,6 +393,7 @@ export function useRealtimeSession({
   onTranscript,
   onPhaseChange,
   pruneConsumedFrames,
+  responseMode,
 }: UseRealtimeSessionOptions): UseRealtimeSessionResult {
   const [realtimeState, setRealtimeState] =
     useState<RealtimeSessionState>(initialRealtimeState);
@@ -404,7 +418,9 @@ export function useRealtimeSession({
   const pruneTrackerRef = useRef<FramePruneTracker>(createFramePruneTracker());
   const pruneSequenceRef = useRef(0);
   const pruneConsumedFramesRef = useRef(pruneConsumedFrames);
+  const responseModeRef = useRef<RealtimeResponseMode>(responseMode);
   pruneConsumedFramesRef.current = pruneConsumedFrames;
+  responseModeRef.current = responseMode;
 
   const applyMicrophoneTrackState = useCallback((): void => {
     const audioTrack = localAudioTrackRef.current;
@@ -867,7 +883,9 @@ export function useRealtimeSession({
       dataChannel.send(JSON.stringify(conversationEvent));
 
       if (input.requestResponse) {
-        dataChannel.send(JSON.stringify(buildResponseCreateEvent()));
+        dataChannel.send(
+          JSON.stringify(buildResponseCreateEvent(responseModeRef.current)),
+        );
         onPhaseChange("thinking");
       }
 
@@ -891,7 +909,9 @@ export function useRealtimeSession({
       }
 
       dataChannel.send(JSON.stringify(buildTextConversationEvent(trimmedText)));
-      dataChannel.send(JSON.stringify(buildResponseCreateEvent()));
+      dataChannel.send(
+        JSON.stringify(buildResponseCreateEvent(responseModeRef.current)),
+      );
       onPhaseChange("thinking");
 
       return true;
@@ -942,7 +962,9 @@ export function useRealtimeSession({
     }
 
     dataChannel.send(JSON.stringify(buildAudioBufferCommitEvent()));
-    dataChannel.send(JSON.stringify(buildResponseCreateEvent()));
+    dataChannel.send(
+      JSON.stringify(buildResponseCreateEvent(responseModeRef.current)),
+    );
     onPhaseChange("thinking");
 
     return true;

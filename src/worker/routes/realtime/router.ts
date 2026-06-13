@@ -6,6 +6,7 @@ import type { AppEnv } from "../../types";
 import {
   realtimeSessionInputSchema,
   type ApiErrorResponse,
+  type RealtimeResponseBudget,
   type RealtimeSessionSuccessResponse,
 } from "./types";
 
@@ -14,11 +15,21 @@ const OPENAI_REALTIME_SESSIONS_URL =
 const DEFAULT_REALTIME_MODEL = "gpt-realtime";
 const DEFAULT_REALTIME_VOICE = "alloy";
 const MAX_SESSION_SECONDS = 10 * 60;
+const DEFAULT_REALTIME_INSTRUCTIONS =
+  "You are a concise visual dialogue assistant. Use camera frames only when the client explicitly supplies sampled visual context.";
+const BRIEF_RESPONSE_INSTRUCTION =
+  "Keep each answer brief: use one or two short sentences unless the user explicitly asks for detail.";
+const RESPONSE_BUDGET_OUTPUT_TOKENS: Record<RealtimeResponseBudget, number> = {
+  brief: 300,
+  standard: 800,
+  detailed: 1600,
+};
 
 type RealtimeSessionPayload = {
   model: string;
   voice: string;
   instructions: string;
+  max_response_output_tokens: number;
   turn_detection?: null;
 };
 
@@ -50,15 +61,20 @@ realtimeRoutes.post("/session", async (c) => {
     return c.json(response, 400);
   }
 
+  const sessionInput = parseResult.data;
+  const maxResponseOutputTokens =
+    RESPONSE_BUDGET_OUTPUT_TOKENS[sessionInput.responseBudget];
   const sessionPayload: RealtimeSessionPayload = {
     model: c.env.OPENAI_REALTIME_MODEL ?? DEFAULT_REALTIME_MODEL,
     voice: c.env.OPENAI_REALTIME_VOICE ?? DEFAULT_REALTIME_VOICE,
-    instructions:
-      parseResult.data.instructions ??
-      "You are a concise visual dialogue assistant. Use camera frames only when the client explicitly supplies sampled visual context.",
+    instructions: buildSessionInstructions(
+      sessionInput.instructions,
+      sessionInput.responseBudget,
+    ),
+    max_response_output_tokens: maxResponseOutputTokens,
   };
 
-  if (parseResult.data.turnDetectionMode === "push-to-talk") {
+  if (sessionInput.turnDetectionMode === "push-to-talk") {
     sessionPayload.turn_detection = null;
   }
 
@@ -89,8 +105,10 @@ realtimeRoutes.post("/session", async (c) => {
     success: true,
     session: upstreamBody,
     costPolicy: {
-      visualContextMode: parseResult.data.visualContextMode,
-      turnDetectionMode: parseResult.data.turnDetectionMode,
+      visualContextMode: sessionInput.visualContextMode,
+      turnDetectionMode: sessionInput.turnDetectionMode,
+      responseBudget: sessionInput.responseBudget,
+      maxResponseOutputTokens,
       maxSessionSeconds: MAX_SESSION_SECONDS,
       frameUpload: "manual-or-interval",
     },
@@ -98,6 +116,19 @@ realtimeRoutes.post("/session", async (c) => {
 
   return c.json(response);
 });
+
+function buildSessionInstructions(
+  instructions: string | undefined,
+  responseBudget: RealtimeResponseBudget,
+): string {
+  const baseInstructions = instructions ?? DEFAULT_REALTIME_INSTRUCTIONS;
+
+  if (responseBudget !== "brief") {
+    return baseInstructions;
+  }
+
+  return `${baseInstructions}\n${BRIEF_RESPONSE_INSTRUCTION}`;
+}
 
 async function readJsonBody(c: Context<AppEnv>): Promise<unknown> {
   const contentType = c.req.header("content-type") ?? "";
