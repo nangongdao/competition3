@@ -10,8 +10,9 @@ import {
   type RealtimeSessionSuccessResponse,
 } from "./types";
 
-const OPENAI_REALTIME_SESSIONS_URL =
-  "https://api.openai.com/v1/realtime/sessions";
+const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_REALTIME_SESSION_PATH = "/realtime/sessions";
+const DEFAULT_REALTIME_WEBRTC_PATH = "/realtime";
 const DEFAULT_REALTIME_MODEL = "gpt-realtime";
 const DEFAULT_REALTIME_VOICE = "alloy";
 const MAX_SESSION_SECONDS = 10 * 60;
@@ -33,6 +34,13 @@ type RealtimeSessionPayload = {
   turn_detection?: null;
 };
 
+type RealtimeProviderConfig = {
+  sessionUrl: string;
+  webrtcUrl: string;
+  model: string;
+  voice: string;
+};
+
 export const realtimeRoutes = new Hono<AppEnv>();
 
 realtimeRoutes.post("/session", async (c) => {
@@ -43,6 +51,18 @@ realtimeRoutes.post("/session", async (c) => {
       success: false,
       error: "OPENAI_API_KEY is not configured for this Worker.",
       code: "missing_openai_api_key",
+    };
+
+    return c.json(response, 503);
+  }
+
+  const providerConfig = resolveRealtimeProviderConfig(c.env);
+
+  if (providerConfig === null) {
+    const response: ApiErrorResponse = {
+      success: false,
+      error: "Realtime provider URL configuration is invalid.",
+      code: "invalid_realtime_provider_config",
     };
 
     return c.json(response, 503);
@@ -65,8 +85,8 @@ realtimeRoutes.post("/session", async (c) => {
   const maxResponseOutputTokens =
     RESPONSE_BUDGET_OUTPUT_TOKENS[sessionInput.responseBudget];
   const sessionPayload: RealtimeSessionPayload = {
-    model: c.env.OPENAI_REALTIME_MODEL ?? DEFAULT_REALTIME_MODEL,
-    voice: c.env.OPENAI_REALTIME_VOICE ?? DEFAULT_REALTIME_VOICE,
+    model: providerConfig.model,
+    voice: providerConfig.voice,
     instructions: buildSessionInstructions(
       sessionInput.instructions,
       sessionInput.responseBudget,
@@ -78,7 +98,7 @@ realtimeRoutes.post("/session", async (c) => {
     sessionPayload.turn_detection = null;
   }
 
-  const upstreamResponse = await fetch(OPENAI_REALTIME_SESSIONS_URL, {
+  const upstreamResponse = await fetch(providerConfig.sessionUrl, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -94,7 +114,7 @@ realtimeRoutes.post("/session", async (c) => {
       success: false,
       error:
         getUpstreamErrorMessage(upstreamBody) ??
-        `OpenAI session creation failed with status ${upstreamResponse.status}.`,
+        `Realtime provider session creation failed with status ${upstreamResponse.status}.`,
       code: "openai_session_failed",
     };
 
@@ -104,6 +124,11 @@ realtimeRoutes.post("/session", async (c) => {
   const response: RealtimeSessionSuccessResponse = {
     success: true,
     session: upstreamBody,
+    webrtcUrl: appendQueryParam(
+      providerConfig.webrtcUrl,
+      "model",
+      getSessionModel(upstreamBody) ?? providerConfig.model,
+    ),
     costPolicy: {
       visualContextMode: sessionInput.visualContextMode,
       turnDetectionMode: sessionInput.turnDetectionMode,
@@ -116,6 +141,87 @@ realtimeRoutes.post("/session", async (c) => {
 
   return c.json(response);
 });
+
+function resolveRealtimeProviderConfig(
+  env: AppEnv["Bindings"],
+): RealtimeProviderConfig | null {
+  const realtimeBaseUrl = normalizeUrl(
+    env.OPENAI_REALTIME_BASE_URL ?? env.OPENAI_BASE_URL ?? DEFAULT_OPENAI_BASE_URL,
+  );
+
+  if (realtimeBaseUrl === null) {
+    return null;
+  }
+
+  const sessionUrl =
+    normalizeUrl(env.OPENAI_REALTIME_SESSION_URL) ??
+    buildUrl(
+      realtimeBaseUrl,
+      env.OPENAI_REALTIME_SESSION_PATH ?? DEFAULT_REALTIME_SESSION_PATH,
+    );
+  const webrtcUrl =
+    normalizeUrl(env.OPENAI_REALTIME_WEBRTC_URL) ??
+    buildUrl(
+      realtimeBaseUrl,
+      env.OPENAI_REALTIME_WEBRTC_PATH ?? DEFAULT_REALTIME_WEBRTC_PATH,
+    );
+
+  if (sessionUrl === null || webrtcUrl === null) {
+    return null;
+  }
+
+  return {
+    sessionUrl,
+    webrtcUrl,
+    model: env.OPENAI_REALTIME_MODEL ?? DEFAULT_REALTIME_MODEL,
+    voice: env.OPENAI_REALTIME_VOICE ?? DEFAULT_REALTIME_VOICE,
+  };
+}
+
+function normalizeUrl(value: string | undefined): string | null {
+  const trimmedValue = value?.trim();
+
+  if (trimmedValue === undefined || trimmedValue.length === 0) {
+    return null;
+  }
+
+  try {
+    return new URL(trimmedValue).toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function buildUrl(baseUrl: string, path: string): string | null {
+  const trimmedPath = path.trim();
+
+  if (trimmedPath.length === 0) {
+    return null;
+  }
+
+  try {
+    return new URL(trimmedPath.replace(/^\/+/, ""), `${baseUrl}/`).toString();
+  } catch {
+    return null;
+  }
+}
+
+function appendQueryParam(url: string, key: string, value: string): string {
+  const targetUrl = new URL(url);
+  targetUrl.searchParams.set(key, value);
+
+  return targetUrl.toString();
+}
+
+function getSessionModel(session: unknown): string | null {
+  if (typeof session !== "object" || session === null || !("model" in session)) {
+    return null;
+  }
+
+  const model = session.model;
+
+  return typeof model === "string" && model.trim().length > 0 ? model : null;
+}
 
 function buildSessionInstructions(
   instructions: string | undefined,

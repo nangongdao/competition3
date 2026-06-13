@@ -47,8 +47,8 @@ corepack prepare pnpm@11.6.0 --activate
 ## Setup
 
 ```bash
-pnpm install
-pnpm dev
+corepack pnpm install
+corepack pnpm dev
 ```
 
 The local frontend runs on the Vite URL printed by the command, usually `http://localhost:5173`.
@@ -65,7 +65,7 @@ corepack pnpm dev
 Build the frontend and start the Worker for end-to-end API and Realtime testing:
 
 ```bash
-pnpm dev:worker
+corepack pnpm dev:worker
 ```
 
 Health check:
@@ -82,26 +82,112 @@ curl -X POST http://localhost:8787/api/realtime/session \
   -d "{\"visualContextMode\":\"manual\",\"turnDetectionMode\":\"server-vad\"}"
 ```
 
+## Windows Quick Start With Realtime
+
+PowerShell startup command for the default OpenAI Realtime endpoint:
+
+```powershell
+cd E:\competition3
+corepack enable
+corepack prepare pnpm@11.6.0 --activate
+corepack pnpm install
+.\scripts\start-realtime-worker.ps1 -ApiKey "sk-your-key"
+```
+
+Open the Worker URL after startup:
+
+```text
+http://localhost:8787
+```
+
+PowerShell startup command for a third-party OpenAI-compatible Realtime
+provider:
+
+```powershell
+cd E:\competition3
+.\scripts\start-realtime-worker.ps1 `
+  -ApiKey "your-provider-key" `
+  -BaseUrl "https://api.your-provider.example/v1" `
+  -Model "your-realtime-model" `
+  -Voice "alloy"
+```
+
+If the provider does not use OpenAI's default Realtime paths, override the
+paths:
+
+```powershell
+.\scripts\start-realtime-worker.ps1 `
+  -ApiKey "your-provider-key" `
+  -BaseUrl "https://api.your-provider.example/v1" `
+  -SessionPath "/realtime/sessions" `
+  -WebrtcPath "/realtime" `
+  -Model "your-realtime-model"
+```
+
+If the provider requires completely different endpoint URLs, override the full
+URLs:
+
+```powershell
+.\scripts\start-realtime-worker.ps1 `
+  -ApiKey "your-provider-key" `
+  -SessionUrl "https://api.your-provider.example/custom/realtime/session" `
+  -WebrtcUrl "https://rtc.your-provider.example/connect" `
+  -Model "your-realtime-model"
+```
+
 ## Quality Checks
 
 ```bash
-pnpm lint
-pnpm typecheck
-pnpm build
+corepack pnpm lint
+corepack pnpm typecheck
+corepack pnpm test
+corepack pnpm build
 ```
 
 ## Environment Variables
 
 Do not commit secrets. Use `.dev.vars` for local Worker runtime secrets.
 
-Planned variables:
+Worker runtime variables:
 
 ```bash
 OPENAI_API_KEY=sk-...
 ENVIRONMENT=development
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_REALTIME_BASE_URL=
+OPENAI_REALTIME_SESSION_PATH=/realtime/sessions
+OPENAI_REALTIME_WEBRTC_PATH=/realtime
+OPENAI_REALTIME_SESSION_URL=
+OPENAI_REALTIME_WEBRTC_URL=
 OPENAI_REALTIME_MODEL=gpt-realtime
 OPENAI_REALTIME_VOICE=alloy
 ```
+
+Parameter meanings:
+
+* `OPENAI_API_KEY`: Permanent server-side API key for OpenAI or the
+  third-party provider. Required for real Realtime sessions. Never expose it
+  through `VITE_` variables, browser settings, localStorage, or URLs.
+* `ENVIRONMENT`: Runtime label returned by `/api/health`; use `development`
+  locally.
+* `OPENAI_BASE_URL`: OpenAI-compatible API root. Defaults to
+  `https://api.openai.com/v1`. For many third-party providers this is the only
+  URL parameter you need to change.
+* `OPENAI_REALTIME_BASE_URL`: Optional Realtime-specific API root. If set, it
+  overrides `OPENAI_BASE_URL` only for Realtime session creation and WebRTC SDP
+  exchange.
+* `OPENAI_REALTIME_SESSION_PATH`: Path appended to the selected base URL for
+  creating short-lived sessions. Default: `/realtime/sessions`.
+* `OPENAI_REALTIME_WEBRTC_PATH`: Path appended to the selected base URL for
+  browser WebRTC SDP exchange. Default: `/realtime`.
+* `OPENAI_REALTIME_SESSION_URL`: Optional full session-creation URL. Use only
+  when the provider cannot be represented by base URL plus path.
+* `OPENAI_REALTIME_WEBRTC_URL`: Optional full WebRTC SDP URL. Use only when the
+  provider cannot be represented by base URL plus path.
+* `OPENAI_REALTIME_MODEL`: Provider model ID used when creating a Realtime
+  session. Default: `gpt-realtime`.
+* `OPENAI_REALTIME_VOICE`: Provider voice ID used for audio output when the
+  provider supports voice selection. Default: `alloy`.
 
 Frontend variables must use the `VITE_` prefix and must not contain secrets.
 
@@ -110,16 +196,49 @@ Worker session endpoint returns a configuration error instead of exposing a
 browser-side key. The Start session control will surface that configuration
 error in the transcript.
 
+## Third-Party Provider Requirements
+
+This app does not use ordinary Chat Completions. A provider that says it is
+"OpenAI compatible" is not enough unless it also implements the Realtime WebRTC
+surface used here.
+
+The provider/model must support:
+
+* Creating a short-lived Realtime session with a Bearer API key.
+* Returning a session object with `client_secret.value` or a compatible
+  `client_secret` string.
+* WebRTC SDP exchange over HTTP with `Content-Type: application/sdp` and
+  `Authorization: Bearer <client_secret>`.
+* Realtime data channel events using the `oai-events` channel.
+* `conversation.item.create` messages with `input_text` content.
+* `conversation.item.create` messages with `input_image.image_url` data URLs if
+  you want camera-frame understanding.
+* `response.create` with `modalities: ["audio", "text"]` and/or
+  `modalities: ["text"]`.
+* Microphone audio input over WebRTC.
+* `input_audio_buffer.commit` if push-to-talk mode is used.
+* `turn_detection: null` if push-to-talk mode is used, or server VAD if
+  `server-vad` mode is used.
+* `max_response_output_tokens` or a compatible response length control if you
+  want the response budget selector to work as intended.
+
+Providers that only support `/v1/chat/completions`, `/v1/responses`, or normal
+HTTP text generation cannot be connected to this project without adding a
+separate non-Realtime adapter.
+
 ## Realtime Flow
 
 1. The browser asks `POST /api/realtime/session` for a short-lived session.
-2. The Worker calls OpenAI with the permanent `OPENAI_API_KEY`.
-3. The browser uses `session.client_secret.value` to post a WebRTC SDP offer to
-   OpenAI's Realtime endpoint.
-4. Microphone audio is sent over the peer connection. Server VAD can detect
+2. The Worker calls the configured Realtime provider with the permanent
+   `OPENAI_API_KEY`.
+3. The Worker returns the short-lived provider session plus a configured
+   `webrtcUrl`.
+4. The browser uses `session.client_secret.value` to post a WebRTC SDP offer to
+   `webrtcUrl`.
+5. Microphone audio is sent over the peer connection. Server VAD can detect
    turns automatically, or push-to-talk can disable server VAD and commit the
    audio buffer only when the user releases the hold control.
-5. Assistant audio is played through the page, and sampled camera frames are
+6. Assistant audio is played through the page, and sampled camera frames are
    sent over the Realtime data channel.
 
 ## Dependencies
