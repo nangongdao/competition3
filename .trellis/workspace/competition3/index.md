@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-06-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~372 | Active |
+| `journal-1.md` | ~405 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-06-13 | Idle auto-disconnect | `7196e1f` | `feat/idle-auto-disconnect` |
 | 11 | 2026-06-13 | Response budgets | `ddf9ac4` | `feat/response-budgets` |
 | 10 | 2026-06-13 | Document GitHub API push fallback | `ce55de7` | `docs/github-api-push-fallback-guidance` |
 | 9 | 2026-06-13 | Push-to-talk microphone controls | `f618a5c` | `feat/push-to-talk-microphone-mute` |

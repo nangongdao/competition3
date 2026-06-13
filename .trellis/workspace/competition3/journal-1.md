@@ -370,3 +370,36 @@ Implemented Realtime response budget presets, text-only response mode, cost-poli
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: Idle auto-disconnect
+
+**Date**: 2026-06-13
+**Task**: Idle auto-disconnect
+**Branch**: `feat/idle-auto-disconnect`
+
+### Summary
+
+Implemented activity-based Realtime idle warning and auto-disconnect, updated roadmap/design/spec docs, and verified lint, typecheck, build, and tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7196e1f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
