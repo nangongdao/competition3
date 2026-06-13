@@ -18,6 +18,7 @@ boundary in place:
 * Remote assistant audio playback through the WebRTC peer connection
 * Manual and low-frequency visual frame sampling controls
 * Sampled frame delivery through the Realtime data channel
+* Text message composer for typed questions during a Realtime session
 * ESLint, typecheck, build, and preview scripts
 * Dependency and environment documentation
 

@@ -468,8 +468,9 @@ h1 {
 
 .dialogue-board {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
-  max-height: 260px;
+  max-height: 300px;
   padding: 18px;
   color: #f8f4ea;
   background: rgba(5, 7, 5, 0.72);
@@ -601,6 +602,60 @@ h1 {
   margin: 0;
   color: rgba(248, 244, 234, 0.82);
   line-height: 1.45;
+}
+
+.text-composer {
+  display: flex;
+  gap: 10px;
+}
+
+.text-composer input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  color: #f8f4ea;
+  font: inherit;
+  background: rgba(248, 244, 234, 0.08);
+  border: 1px solid rgba(248, 244, 234, 0.24);
+  border-radius: 8px;
+}
+
+.text-composer input::placeholder {
+  color: rgba(248, 244, 234, 0.45);
+}
+
+.text-composer input:focus-visible {
+  outline: 2px solid #d7ff65;
+  outline-offset: 1px;
+}
+
+.text-composer input:disabled {
+  color: rgba(248, 244, 234, 0.4);
+  cursor: not-allowed;
+}
+
+.text-composer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  color: #101510;
+  font: inherit;
+  font-weight: 800;
+  background: #d7ff65;
+  border: 1px solid rgba(17, 22, 17, 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.text-composer button:not(:disabled):hover {
+  background: #c5f04f;
+}
+
+.text-composer button:disabled {
+  color: rgba(16, 21, 16, 0.5);
+  background: rgba(215, 255, 101, 0.35);
+  cursor: not-allowed;
 }
 
 .security-strip {

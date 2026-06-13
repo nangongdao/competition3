@@ -46,6 +46,7 @@ type UseRealtimeSessionResult = {
   startSession: (input: StartRealtimeSessionInput) => Promise<boolean>;
   stopSession: () => void;
   sendVisualContext: (input: SendVisualContextInput) => boolean;
+  sendTextMessage: (text: string) => boolean;
 };
 
 type RealtimeContentPart =
@@ -295,6 +296,24 @@ function buildConversationEvent(
         {
           type: "input_image",
           image_url: input.frameDataUrl,
+        },
+      ],
+    },
+  };
+}
+
+function buildTextConversationEvent(
+  text: string,
+): RealtimeConversationItemCreateEvent {
+  return {
+    type: "conversation.item.create",
+    item: {
+      type: "message",
+      role: "user",
+      content: [
+        {
+          type: "input_text",
+          text,
         },
       ],
     },
@@ -668,6 +687,36 @@ export function useRealtimeSession({
     [onPhaseChange],
   );
 
+  const sendTextMessage = useCallback(
+    (text: string): boolean => {
+      const dataChannel = dataChannelRef.current;
+
+      if (dataChannel === null || dataChannel.readyState !== "open") {
+        return false;
+      }
+
+      const trimmedText = text.trim();
+
+      if (trimmedText.length === 0) {
+        return false;
+      }
+
+      dataChannel.send(JSON.stringify(buildTextConversationEvent(trimmedText)));
+
+      const responseEvent: RealtimeResponseCreateEvent = {
+        type: "response.create",
+        response: {
+          modalities: ["audio", "text"],
+        },
+      };
+      dataChannel.send(JSON.stringify(responseEvent));
+      onPhaseChange("thinking");
+
+      return true;
+    },
+    [onPhaseChange],
+  );
+
   useEffect(() => {
     return () => {
       closeConnection("idle");
@@ -680,5 +729,6 @@ export function useRealtimeSession({
     startSession,
     stopSession,
     sendVisualContext,
+    sendTextMessage,
   };
 }

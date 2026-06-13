@@ -8,6 +8,7 @@ import {
   Play,
   Radio,
   RefreshCcw,
+  Send,
   ShieldCheck,
   Sparkles,
   Video,
@@ -106,6 +107,7 @@ export function AssistantWorkspace(): React.JSX.Element {
   const [sampledFrameCount, setSampledFrameCount] = useState(0);
   const [isAutoSampling, setIsAutoSampling] = useState(false);
   const [samplingIntervalSeconds, setSamplingIntervalSeconds] = useState(8);
+  const [textDraft, setTextDraft] = useState("");
   const nextEntryIdRef = useRef(initialTranscript.length);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -142,6 +144,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     startSession: startRealtimeSession,
     stopSession: stopRealtimeSession,
     sendVisualContext,
+    sendTextMessage,
   } = useRealtimeSession({
     stream,
     onTranscript: addTranscript,
@@ -395,6 +398,42 @@ export function AssistantWorkspace(): React.JSX.Element {
     event: React.ChangeEvent<HTMLInputElement>,
   ): void => {
     setIsAutoSampling(event.currentTarget.checked);
+  };
+
+  const handleTextDraftChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): void => {
+    setTextDraft(event.currentTarget.value);
+  };
+
+  const handleTextMessageSubmit = (
+    event: React.FormEvent<HTMLFormElement>,
+  ): void => {
+    event.preventDefault();
+
+    const message = textDraft.trim();
+
+    if (message.length === 0) {
+      return;
+    }
+
+    if (!hasRealtimeConnection) {
+      addTranscript(
+        "system",
+        "Start a Realtime session before sending text messages.",
+      );
+      return;
+    }
+
+    const sent = sendTextMessage(message);
+
+    if (!sent) {
+      addTranscript("system", "Realtime data channel is not ready for text input.");
+      return;
+    }
+
+    addTranscript("user", message);
+    setTextDraft("");
   };
 
   const handleSamplingIntervalChange = (
@@ -663,6 +702,33 @@ export function AssistantWorkspace(): React.JSX.Element {
               </li>
             ))}
           </ol>
+
+          <form
+            className="text-composer"
+            onSubmit={handleTextMessageSubmit}
+            aria-label="Send a text message"
+          >
+            <input
+              type="text"
+              value={textDraft}
+              onChange={handleTextDraftChange}
+              placeholder={
+                hasRealtimeConnection
+                  ? "Type a message to the assistant"
+                  : "Start a session to send text"
+              }
+              disabled={!hasRealtimeConnection}
+              aria-label="Text message to the assistant"
+            />
+            <button
+              type="submit"
+              disabled={!hasRealtimeConnection || textDraft.trim().length === 0}
+              aria-label="Send text message"
+            >
+              <Send size={16} aria-hidden="true" />
+              <span>Send</span>
+            </button>
+          </form>
         </div>
 
         <aside className="security-strip" aria-label="Key protection">
