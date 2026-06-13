@@ -30,15 +30,18 @@ import type {
   ApiErrorResponse,
   RealtimeCostPolicy,
   RealtimeSessionSuccessResponse,
+  RealtimeTurnDetectionMode,
 } from "../../../../src/worker/routes/realtime/types";
 
 const REALTIME_WEBRTC_URL = "https://api.openai.com/v1/realtime";
 const DEFAULT_REALTIME_MODEL = "gpt-realtime";
+const DEFAULT_TURN_DETECTION_MODE: RealtimeTurnDetectionMode = "server-vad";
 const DATA_CHANNEL_LABEL = "oai-events";
 const DATA_CHANNEL_OPEN_TIMEOUT_MS = 15_000;
 
 type StartRealtimeSessionInput = {
   visualContextMode: RealtimeCostPolicy["visualContextMode"];
+  turnDetectionMode: RealtimeTurnDetectionMode;
   instructions?: string;
 };
 
@@ -72,6 +75,11 @@ type UseRealtimeSessionResult = {
   stopSession: () => void;
   sendVisualContext: (input: SendVisualContextInput) => boolean;
   sendTextMessage: (text: string) => boolean;
+  isMicrophoneMuted: boolean;
+  isPushToTalkActive: boolean;
+  setMicrophoneMuted: (isMuted: boolean) => void;
+  startPushToTalk: () => boolean;
+  stopPushToTalk: () => boolean;
 };
 
 type RealtimeContentPart =
@@ -98,6 +106,10 @@ type RealtimeResponseCreateEvent = {
   response: {
     modalities: ["audio", "text"];
   };
+};
+
+type RealtimeInputAudioBufferCommitEvent = {
+  type: "input_audio_buffer.commit";
 };
 
 const initialRealtimeState: RealtimeSessionState = {
@@ -169,6 +181,8 @@ function isRealtimeCostPolicy(value: unknown): value is RealtimeCostPolicy {
     isRecord(value) &&
     (value.visualContextMode === "manual" ||
       value.visualContextMode === "interval") &&
+    (value.turnDetectionMode === "server-vad" ||
+      value.turnDetectionMode === "push-to-talk") &&
     typeof value.maxSessionSeconds === "number" &&
     value.frameUpload === "manual-or-interval"
   );
@@ -213,6 +227,7 @@ async function createRealtimeSession(
 ): Promise<RealtimeSessionSuccessResponse> {
   const requestBody: StartRealtimeSessionInput = {
     visualContextMode: input.visualContextMode,
+    turnDetectionMode: input.turnDetectionMode,
   };
 
   if (input.instructions !== undefined) {
@@ -293,6 +308,18 @@ function waitForDataChannelOpen(dataChannel: RTCDataChannel): Promise<void> {
   });
 }
 
+function shouldEnableMicrophoneTrack(
+  turnDetectionMode: RealtimeTurnDetectionMode,
+  isMicrophoneMuted: boolean,
+  isPushToTalkActive: boolean,
+): boolean {
+  if (isMicrophoneMuted) {
+    return false;
+  }
+
+  return turnDetectionMode === "server-vad" || isPushToTalkActive;
+}
+
 function buildConversationEvent(
   input: SendVisualContextInput,
 ): RealtimeConversationItemCreateEvent {
@@ -333,6 +360,21 @@ function buildTextConversationEvent(
   };
 }
 
+function buildResponseCreateEvent(): RealtimeResponseCreateEvent {
+  return {
+    type: "response.create",
+    response: {
+      modalities: ["audio", "text"],
+    },
+  };
+}
+
+function buildAudioBufferCommitEvent(): RealtimeInputAudioBufferCommitEvent {
+  return {
+    type: "input_audio_buffer.commit",
+  };
+}
+
 export function useRealtimeSession({
   stream,
   onTranscript,
@@ -346,15 +388,52 @@ export function useRealtimeSession({
     createEmptyUsageReport,
   );
   const [prunedFrameCount, setPrunedFrameCount] = useState(0);
+  const [isMicrophoneMuted, setIsMicrophoneMuted] = useState(false);
+  const [isPushToTalkActive, setIsPushToTalkActive] = useState(false);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
+  const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const sessionTimerIdRef = useRef<number | null>(null);
   const assistantTextBufferRef = useRef("");
+  const turnDetectionModeRef = useRef<RealtimeTurnDetectionMode>(
+    DEFAULT_TURN_DETECTION_MODE,
+  );
+  const isMicrophoneMutedRef = useRef(false);
+  const isPushToTalkActiveRef = useRef(false);
   const pruneTrackerRef = useRef<FramePruneTracker>(createFramePruneTracker());
   const pruneSequenceRef = useRef(0);
   const pruneConsumedFramesRef = useRef(pruneConsumedFrames);
   pruneConsumedFramesRef.current = pruneConsumedFrames;
+
+  const applyMicrophoneTrackState = useCallback((): void => {
+    const audioTrack = localAudioTrackRef.current;
+
+    if (audioTrack === null) {
+      return;
+    }
+
+    audioTrack.enabled = shouldEnableMicrophoneTrack(
+      turnDetectionModeRef.current,
+      isMicrophoneMutedRef.current,
+      isPushToTalkActiveRef.current,
+    );
+  }, []);
+
+  const setMicrophoneMuted = useCallback(
+    (nextMuted: boolean): void => {
+      isMicrophoneMutedRef.current = nextMuted;
+      setIsMicrophoneMuted(nextMuted);
+
+      if (nextMuted && isPushToTalkActiveRef.current) {
+        isPushToTalkActiveRef.current = false;
+        setIsPushToTalkActive(false);
+      }
+
+      applyMicrophoneTrackState();
+    },
+    [applyMicrophoneTrackState],
+  );
 
   const clearSessionTimer = useCallback((): void => {
     if (sessionTimerIdRef.current !== null) {
@@ -379,6 +458,15 @@ export function useRealtimeSession({
     (nextStatus: RealtimeConnectionStatus): void => {
       clearSessionTimer();
       assistantTextBufferRef.current = "";
+      isPushToTalkActiveRef.current = false;
+      setIsPushToTalkActive(false);
+
+      const localAudioTrack = localAudioTrackRef.current;
+      if (localAudioTrack !== null) {
+        localAudioTrack.enabled = !isMicrophoneMutedRef.current;
+      }
+      localAudioTrackRef.current = null;
+      turnDetectionModeRef.current = DEFAULT_TURN_DETECTION_MODE;
 
       const dataChannel = dataChannelRef.current;
       if (dataChannel !== null && dataChannel.readyState !== "closed") {
@@ -611,6 +699,11 @@ export function useRealtimeSession({
       }
 
       closeConnection("idle");
+      turnDetectionModeRef.current = input.turnDetectionMode;
+      isPushToTalkActiveRef.current = false;
+      setIsPushToTalkActive(false);
+      localAudioTrackRef.current = audioTrack;
+      applyMicrophoneTrackState();
       setUsageReport(createEmptyUsageReport());
       setPrunedFrameCount(0);
       pruneTrackerRef.current = createFramePruneTracker();
@@ -744,6 +837,7 @@ export function useRealtimeSession({
       }
     },
     [
+      applyMicrophoneTrackState,
       closeConnection,
       handleServerEvent,
       onPhaseChange,
@@ -773,13 +867,7 @@ export function useRealtimeSession({
       dataChannel.send(JSON.stringify(conversationEvent));
 
       if (input.requestResponse) {
-        const responseEvent: RealtimeResponseCreateEvent = {
-          type: "response.create",
-          response: {
-            modalities: ["audio", "text"],
-          },
-        };
-        dataChannel.send(JSON.stringify(responseEvent));
+        dataChannel.send(JSON.stringify(buildResponseCreateEvent()));
         onPhaseChange("thinking");
       }
 
@@ -803,20 +891,62 @@ export function useRealtimeSession({
       }
 
       dataChannel.send(JSON.stringify(buildTextConversationEvent(trimmedText)));
-
-      const responseEvent: RealtimeResponseCreateEvent = {
-        type: "response.create",
-        response: {
-          modalities: ["audio", "text"],
-        },
-      };
-      dataChannel.send(JSON.stringify(responseEvent));
+      dataChannel.send(JSON.stringify(buildResponseCreateEvent()));
       onPhaseChange("thinking");
 
       return true;
     },
     [onPhaseChange],
   );
+
+  const startPushToTalk = useCallback((): boolean => {
+    if (
+      realtimeState.status !== "connected" ||
+      turnDetectionModeRef.current !== "push-to-talk" ||
+      isMicrophoneMutedRef.current
+    ) {
+      return false;
+    }
+
+    if (isPushToTalkActiveRef.current) {
+      return true;
+    }
+
+    isPushToTalkActiveRef.current = true;
+    setIsPushToTalkActive(true);
+    applyMicrophoneTrackState();
+    onPhaseChange("listening");
+    return true;
+  }, [applyMicrophoneTrackState, onPhaseChange, realtimeState.status]);
+
+  const stopPushToTalk = useCallback((): boolean => {
+    if (
+      turnDetectionModeRef.current !== "push-to-talk" ||
+      !isPushToTalkActiveRef.current
+    ) {
+      return false;
+    }
+
+    isPushToTalkActiveRef.current = false;
+    setIsPushToTalkActive(false);
+    applyMicrophoneTrackState();
+
+    const dataChannel = dataChannelRef.current;
+
+    if (
+      isMicrophoneMutedRef.current ||
+      dataChannel === null ||
+      dataChannel.readyState !== "open"
+    ) {
+      return false;
+    }
+
+    dataChannel.send(JSON.stringify(buildAudioBufferCommitEvent()));
+    dataChannel.send(JSON.stringify(buildResponseCreateEvent()));
+    onPhaseChange("thinking");
+
+    return true;
+  }, [applyMicrophoneTrackState, onPhaseChange]);
 
   useEffect(() => {
     return () => {
@@ -833,5 +963,10 @@ export function useRealtimeSession({
     stopSession,
     sendVisualContext,
     sendTextMessage,
+    isMicrophoneMuted,
+    isPushToTalkActive,
+    setMicrophoneMuted,
+    startPushToTalk,
+    stopPushToTalk,
   };
 }

@@ -619,6 +619,7 @@ When the session changes (login/logout), invalidate all user-scoped caches:
 ```typescript
 type StartRealtimeSessionInput = {
   visualContextMode: "manual" | "interval";
+  turnDetectionMode: "server-vad" | "push-to-talk";
   instructions?: string;
 };
 ```
@@ -642,6 +643,12 @@ type SendVisualContextInput = {
   `client_secret.value` and may include `model`; if `model` is absent, the
   browser falls back to the project Realtime default.
 - The browser sends microphone audio over the `RTCPeerConnection`.
+- `turnDetectionMode: "push-to-talk"` disables server VAD in the Worker-created
+  session and the browser must keep the local audio track disabled while idle.
+- Push-to-talk release sends `input_audio_buffer.commit` followed by
+  `response.create` on the Realtime data channel.
+- Microphone mute uses `MediaStreamTrack.enabled = false` and must not require
+  WebRTC renegotiation.
 - The browser receives assistant audio from `peerConnection.ontrack` and binds
   the remote stream to an `<audio autoplay>` element.
 - The Realtime data channel label is `oai-events`.
@@ -662,6 +669,7 @@ type SendVisualContextInput = {
 | Worker response lacks `session.client_secret.value` | Close partial peer connection and show a contract error. |
 | SDP exchange fails | Close partial peer connection and show the upstream error text/status. |
 | Data channel is not open | Do not send frames; return `false` from the send function. |
+| Push-to-talk is muted or not active | Keep the audio track disabled and do not commit an audio buffer. |
 | Realtime server sends `error` event | Surface the message and move the UI to an error state. |
 
 ### 5. Good/Base/Bad Cases
@@ -678,6 +686,8 @@ type SendVisualContextInput = {
 
 - Worker route tests must assert missing key maps to 503, invalid body maps to
   400, upstream failure maps to 502, and success returns the cost policy.
+- Worker route tests must cover default server VAD and push-to-talk
+  `turn_detection: null` payload mapping.
 - Typecheck must verify the hook consumes backend response types through
   type-only imports.
 - Browser smoke/manual tests must cover camera/microphone permission prompts,

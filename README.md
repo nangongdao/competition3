@@ -16,6 +16,7 @@ boundary in place:
 * Live camera preview after permission is granted
 * Start/stop controls for a browser WebRTC Realtime session
 * Remote assistant audio playback through the WebRTC peer connection
+* Server VAD and push-to-talk turn modes, plus a live microphone mute toggle
 * Manual and low-frequency visual frame sampling controls
 * Frame-difference gating for automatic sampling, with visible sent/skipped
   counters to show static-scene upload savings
@@ -78,7 +79,7 @@ Realtime session check:
 ```bash
 curl -X POST http://localhost:8787/api/realtime/session \
   -H "Content-Type: application/json" \
-  -d "{\"visualContextMode\":\"manual\"}"
+  -d "{\"visualContextMode\":\"manual\",\"turnDetectionMode\":\"server-vad\"}"
 ```
 
 ## Quality Checks
@@ -115,9 +116,11 @@ error in the transcript.
 2. The Worker calls OpenAI with the permanent `OPENAI_API_KEY`.
 3. The browser uses `session.client_secret.value` to post a WebRTC SDP offer to
    OpenAI's Realtime endpoint.
-4. Microphone audio is sent over the peer connection, assistant audio is played
-   through the page, and sampled camera frames are sent over the Realtime data
-   channel.
+4. Microphone audio is sent over the peer connection. Server VAD can detect
+   turns automatically, or push-to-talk can disable server VAD and commit the
+   audio buffer only when the user releases the hold control.
+5. Assistant audio is played through the page, and sampled camera frames are
+   sent over the Realtime data channel.
 
 ## Dependencies
 

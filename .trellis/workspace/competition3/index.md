@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 9
 - **Last Active**: 2026-06-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~273 | Active |
+| `journal-1.md` | ~306 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-06-13 | Push-to-talk microphone controls | `f618a5c` | `feat/push-to-talk-microphone-mute` |
 | 8 | 2026-06-13 | Frame difference sampling | `336de22` | `feat/frame-difference-sampling` |
 | 7 | 2026-06-13 | Document development roadmap | `b576e2b` | `docs/development-roadmap` |
 | 6 | 2026-06-13 | Conversation history frame pruning | `97442c9` | `feat/history-frame-pruning` |

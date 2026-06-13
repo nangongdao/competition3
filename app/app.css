@@ -239,6 +239,14 @@ h1 {
   background: #ff6f61;
 }
 
+.control-button.ptt {
+  background: #67d9d7;
+}
+
+.control-button.ptt[data-active="true"] {
+  background: #d7ff65;
+}
+
 .release-button {
   width: 100%;
   min-height: 44px;
@@ -301,6 +309,77 @@ h1 {
   display: grid;
   gap: 12px;
   padding-top: 4px;
+}
+
+.voice-controls {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.mode-segment {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mode-segment legend {
+  margin: 0;
+  color: #52605b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.mode-segment > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mode-segment label {
+  position: relative;
+  min-width: 0;
+}
+
+.mode-segment input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mode-segment span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 10px;
+  color: #111611;
+  font-size: 0.86rem;
+  font-weight: 850;
+  text-align: center;
+  background: #fffdf7;
+  border: 1px solid rgba(17, 22, 17, 0.24);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mode-segment input:checked + span {
+  color: #f8f4ea;
+  background: #111611;
+}
+
+.mode-segment input:focus-visible + span {
+  outline: 2px solid #5a4fcf;
+  outline-offset: 2px;
+}
+
+.mode-segment:disabled span {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .usage-panel {
@@ -808,6 +887,7 @@ h1 {
 
   .control-grid,
   .cost-panel dl div,
+  .mode-segment > div,
   .visual-context-panel,
   .frame-stats {
     grid-template-columns: 1fr;

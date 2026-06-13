@@ -15,6 +15,13 @@ const DEFAULT_REALTIME_MODEL = "gpt-realtime";
 const DEFAULT_REALTIME_VOICE = "alloy";
 const MAX_SESSION_SECONDS = 10 * 60;
 
+type RealtimeSessionPayload = {
+  model: string;
+  voice: string;
+  instructions: string;
+  turn_detection?: null;
+};
+
 export const realtimeRoutes = new Hono<AppEnv>();
 
 realtimeRoutes.post("/session", async (c) => {
@@ -43,13 +50,17 @@ realtimeRoutes.post("/session", async (c) => {
     return c.json(response, 400);
   }
 
-  const sessionPayload = {
+  const sessionPayload: RealtimeSessionPayload = {
     model: c.env.OPENAI_REALTIME_MODEL ?? DEFAULT_REALTIME_MODEL,
     voice: c.env.OPENAI_REALTIME_VOICE ?? DEFAULT_REALTIME_VOICE,
     instructions:
       parseResult.data.instructions ??
       "You are a concise visual dialogue assistant. Use camera frames only when the client explicitly supplies sampled visual context.",
   };
+
+  if (parseResult.data.turnDetectionMode === "push-to-talk") {
+    sessionPayload.turn_detection = null;
+  }
 
   const upstreamResponse = await fetch(OPENAI_REALTIME_SESSIONS_URL, {
     method: "POST",
@@ -79,6 +90,7 @@ realtimeRoutes.post("/session", async (c) => {
     session: upstreamBody,
     costPolicy: {
       visualContextMode: parseResult.data.visualContextMode,
+      turnDetectionMode: parseResult.data.turnDetectionMode,
       maxSessionSeconds: MAX_SESSION_SECONDS,
       frameUpload: "manual-or-interval",
     },
