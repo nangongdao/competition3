@@ -60,6 +60,7 @@ useless input, then cap output, then write down the measured results.**
 | pending | `feat/third-party-realtime-provider` | Third-party Realtime provider configuration: Worker-side base URL/path/full URL overrides, browser uses returned `webrtcUrl`, README startup commands, and local PowerShell startup helper | in progress |
 | pending | `feat/chat-completions-provider-mode` | Chat Completions compatibility mode: ordinary `/chat/completions` Worker route, safe provider-mode config endpoint, frontend mode switch, and third-party startup helper | in progress |
 | pending | `feat/chat-mode-browser-speech-adapter` | Browser speech adapter for Chat mode: Web Speech dictation fills the existing Chat text composer and optional speech synthesis reads Chat answers without provider audio tokens | in progress |
+| pending | `docs/final-demo-packaging` | Final demo packaging: local readiness script plus no-key, Chat Completions, Realtime, hardware, and cost-evidence verification checklist | in progress |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission
@@ -185,6 +186,22 @@ which did you adopt"; adopted ones need measured evidence.*
   still require a configured `OPENAI_API_KEY` and local camera/mic test runs.
 * **Verification**: the table cites the usage meter (authoritative
   `response.done` usage), not hand-waving.
+
+### 3.6 Final contest demo packaging (in progress)
+
+*Deliverable lever: the app should be reproducible by reviewers at any point in
+the final pass.*
+
+* **Method**:
+  * Add `scripts/verify-demo.ps1` as a local readiness check for Node/Corepack,
+    required project docs, `.dev.vars` provider readiness, quality gates,
+    production build, and optional Worker endpoint checks.
+  * Add `docs/demo-verification.md` with no-key, Chat Completions, Realtime,
+    hardware, Web Speech, and usage-meter evidence checklists.
+  * Link the checklist from `README.md` and `docs/design.md` so final PR
+    descriptions can cite the same verification path.
+* **Verification**: run the readiness script in fast mode and run the standard
+  quality gates (`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`).
 
 ---
 

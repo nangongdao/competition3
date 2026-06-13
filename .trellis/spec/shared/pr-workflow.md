@@ -187,6 +187,92 @@ The PR description must not be blank and must match the actual diff.
 
 ---
 
+## Demo Readiness Script Contract
+
+Use `scripts/verify-demo.ps1` when a task needs final-demo or PR handoff
+evidence beyond the raw package scripts.
+
+### 1. Scope / Trigger
+
+- Trigger: final contest demo packaging, PR handoff verification, or any task
+  that needs a repeatable local demo readiness check.
+- The script is a verification wrapper, not a provider test runner. It must not
+  make model calls or print secret values.
+
+### 2. Signatures
+
+```powershell
+.\scripts\verify-demo.ps1 `
+  [-RunInstall] `
+  [-SkipQuality] `
+  [-SkipBuild] `
+  [-RequireProviderConfig] `
+  [-WorkerUrl "http://localhost:8787"]
+```
+
+### 3. Contracts
+
+- `-RunInstall`: runs `corepack pnpm install --frozen-lockfile`.
+- `-SkipQuality`: skips `corepack pnpm lint`, `typecheck`, and `test`.
+- `-SkipBuild`: skips `corepack pnpm build`.
+- `-RequireProviderConfig`: treats missing live-provider readiness as a failure.
+- `-WorkerUrl`: if provided, checks `/api/health` and
+  `/api/provider/config`.
+- Environment file: reads `.dev.vars` only to check whether required keys are
+  present; never prints `OPENAI_API_KEY` or provider key values.
+- Provider mode: blank `OPENAI_PROVIDER_MODE` is treated as the Worker default
+  Chat mode for validation purposes.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Missing `node` or `corepack` | Fail |
+| Node.js major version below 24 | Fail |
+| Missing required project docs | Fail |
+| Missing `OPENAI_API_KEY` without `-RequireProviderConfig` | Warn |
+| Missing `OPENAI_API_KEY` with `-RequireProviderConfig` | Fail |
+| Effective Chat mode without `OPENAI_CHAT_MODEL` and `-RequireProviderConfig` | Fail |
+| Invalid `OPENAI_PROVIDER_MODE` with `-RequireProviderConfig` | Fail |
+| Worker URL not provided | Skip HTTP checks |
+| Worker `/api/health` or `/api/provider/config` non-200 | Fail |
+
+### 5. Good/Base/Bad Cases
+
+- Good: `.\scripts\verify-demo.ps1 -RequireProviderConfig -WorkerUrl
+  "http://localhost:8787"` while a configured Worker is running.
+- Base: `.\scripts\verify-demo.ps1 -SkipQuality -SkipBuild` on a no-key local
+  checkout; missing provider keys are warnings.
+- Bad: treating a no-key checkout as a live provider demo, or printing the
+  actual API key in script output.
+
+### 6. Tests Required
+
+- Run `.\scripts\verify-demo.ps1 -SkipQuality -SkipBuild` after changing the
+  script.
+- Run `.\scripts\verify-demo.ps1` before final handoff when time permits; this
+  covers lint, typecheck, tests, and production build.
+- If a Worker is running, add `-WorkerUrl "http://localhost:8787"` to verify
+  the HTTP readiness endpoints.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```powershell
+# Prints secrets and makes the PR log unsafe.
+Get-Content .\.dev.vars
+```
+
+#### Correct
+
+```powershell
+# Only reports whether the key is present.
+.\scripts\verify-demo.ps1 -RequireProviderConfig
+```
+
+---
+
 ## Trellis Task Handling
 
 - Record the task branch and base branch in task metadata when possible:

@@ -53,7 +53,7 @@ server side.
 | Stop paying for consumed camera frames on later turns | Implemented | Consumed frame items are deleted from the server-side conversation after each response, with a visible pruned counter and an opt-out toggle. |
 | Skip static interval frames | Implemented | Automatic sampling compares downscaled grayscale frame signatures and skips low-change uploads; manual frame actions bypass the gate. |
 | Use Chinese as the default demo interface | Implemented | Primary workspace labels, controls, transcript notices, accessibility labels, and client-side Realtime errors are localized for the contest audience. |
-| Package final contest demo | Planned | Final pass should include verification notes and PR descriptions. |
+| Package final contest demo | Implemented | `docs/demo-verification.md` and `scripts/verify-demo.ps1` package no-key, Chat Completions, Realtime, hardware, and evidence checks for final review. |
 
 ## Cost Controls
 
@@ -166,10 +166,25 @@ or CSV files with the PR notes so the table below can be audited.
 | Response budget | Standard audio+text responses | Brief or text-only responses | Output audio/text tokens and estimated cost | Pending live run |
 | Idle auto-disconnect | Session left open until hard cap | Session left idle after final turn | Connected time before close | Pending live run |
 
+## Demo Verification
+
+The final demo package is documented in
+[`demo-verification.md`](demo-verification.md). It includes:
+
+* `scripts/verify-demo.ps1` for toolchain, project file, provider config,
+  quality-gate, build, and optional Worker endpoint checks.
+* A no-key local browser smoke path that verifies the app stays runnable without
+  model credentials.
+* Chat Completions and Realtime provider checklists for configured Worker demos.
+* Manual camera, microphone, speech adapter, and usage-meter checks.
+* Evidence collection guidance for the pending live cost-control measurement
+  table.
+
 ## Current Gaps
 
-* Browser camera and microphone behavior must be manually tested because it
-  depends on local hardware and browser permission prompts.
+* Browser camera and microphone behavior still must be manually tested because
+  it depends on local hardware and browser permission prompts; the demo
+  verification checklist records those checks.
 * End-to-end Chat or Realtime behavior requires `pnpm dev:worker` or deployment
   with a configured `OPENAI_API_KEY`; plain Vite dev mode does not provide the
   Worker API endpoint.
