@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { useChatCompletion } from "@/modules/assistant/hooks/use-chat-completion";
+import { useBrowserSpeechAdapter } from "@/modules/assistant/hooks/use-browser-speech-adapter";
 import { useMediaCapture } from "@/modules/assistant/hooks/use-media-capture";
 import { useProviderConfig } from "@/modules/assistant/hooks/use-provider-config";
 import {
@@ -227,6 +228,8 @@ export function AssistantWorkspace(): React.JSX.Element {
     useState<RealtimeResponseBudget>("standard");
   const [responseMode, setResponseMode] =
     useState<RealtimeResponseMode>("audio-text");
+  const [isChatAnswerSpeechEnabled, setIsChatAnswerSpeechEnabled] =
+    useState(false);
   const [textDraft, setTextDraft] = useState("");
   const nextEntryIdRef = useRef(initialTranscript.length);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -259,6 +262,41 @@ export function AssistantWorkspace(): React.JSX.Element {
     setAssistantPhase(phase);
   }, []);
 
+  const handleChatSpeechTranscript = useCallback(
+    (recognizedText: string): void => {
+      setTextDraft((currentDraft) => {
+        const trimmedCurrentDraft = currentDraft.trim();
+
+        if (trimmedCurrentDraft.length === 0) {
+          return recognizedText;
+        }
+
+        return `${trimmedCurrentDraft} ${recognizedText}`;
+      });
+      addTranscript("system", "????????????");
+    },
+    [addTranscript],
+  );
+
+  const handleBrowserSpeechStatus = useCallback(
+    (message: string): void => {
+      addTranscript("system", message);
+    },
+    [addTranscript],
+  );
+
+  const {
+    speechState,
+    startListening: startChatSpeechInput,
+    stopListening: stopChatSpeechInput,
+    speak: speakChatAnswer,
+    cancelSpeech: cancelChatSpeech,
+  } = useBrowserSpeechAdapter({
+    language: "zh-CN",
+    onTranscript: handleChatSpeechTranscript,
+    onStatusMessage: handleBrowserSpeechStatus,
+  });
+
   const {
     realtimeState,
     remoteStream,
@@ -284,6 +322,7 @@ export function AssistantWorkspace(): React.JSX.Element {
   const hasRealtimeConnection = realtimeState.status === "connected";
   const isChatMode = providerMode === "chat";
   const isRealtimeMode = providerMode === "realtime";
+  const isChatSpeechListening = speechState.recognitionStatus === "listening";
   const usageExport = useMemo(() => {
     const generatedAt = Date.now();
 
@@ -308,7 +347,9 @@ export function AssistantWorkspace(): React.JSX.Element {
   const microphoneStatusLabel = !hasMedia
     ? "?????"
     : isChatMode
-      ? "Chat ?????"
+      ? speechState.isRecognitionSupported
+        ? "?????"
+        : "?????"
     : isMicrophoneMuted
       ? "??????"
       : isPushToTalkMode
@@ -316,6 +357,15 @@ export function AssistantWorkspace(): React.JSX.Element {
           ? "?????"
           : "??????"
         : "??????";
+  const chatSpeechStatusLabel = !speechState.isRecognitionSupported
+    ? "?????????????"
+    : !hasMedia
+      ? "????????????????"
+      : isChatSpeechListening
+        ? "????????????????"
+        : speechState.recognitionStatus === "error"
+          ? speechState.recognitionError ?? "??????????"
+          : "?????????????? Chat ?????";
   const costControls: readonly CostControlSetting[] = [
     {
       label: "????",
@@ -364,9 +414,13 @@ export function AssistantWorkspace(): React.JSX.Element {
     },
     {
       label: "????",
-      value: isChatMode ? "??" : responseModeLabels[responseMode],
+      value: isChatMode
+        ? isChatAnswerSpeechEnabled
+          ? "??+?????"
+          : "??"
+        : responseModeLabels[responseMode],
       detail: isChatMode
-        ? "Chat Completions ???????????? STT/TTS ???"
+        ? "Chat ?????? token????????????????"
         : responseMode === "text-only"
           ? "????????????"
           : "??????????????",
@@ -378,9 +432,13 @@ export function AssistantWorkspace(): React.JSX.Element {
     },
     {
       label: "????",
-      value: isChatMode ? "???" : turnDetectionLabels[activeTurnDetectionMode],
+      value: isChatMode
+        ? speechState.isRecognitionSupported
+          ? "?????"
+          : "???"
+        : turnDetectionLabels[activeTurnDetectionMode],
       detail: isChatMode
-        ? "??????????????????????"
+        ? "?????????????????? Chat ?????"
         : activeTurnDetectionMode === "push-to-talk"
           ? "????????????????"
           : "??? VAD ???????????",
@@ -389,7 +447,7 @@ export function AssistantWorkspace(): React.JSX.Element {
       label: "???",
       value: microphoneStatusLabel,
       detail: isChatMode
-        ? "Chat Completions ???????????????"
+        ? "Chat ?????????????? Worker ????"
         : isMicrophoneMuted
         ? "??????????"
         : "???????????????",
@@ -518,14 +576,19 @@ export function AssistantWorkspace(): React.JSX.Element {
       }
 
       addTranscript("assistant", response.answer);
+      if (isChatAnswerSpeechEnabled) {
+        speakChatAnswer(response.answer);
+      }
       setAssistantPhase(mediaState.status === "granted" ? "ready" : "idle");
     },
     [
       addTranscript,
+      isChatAnswerSpeechEnabled,
       mediaState.status,
       recordUploadedFrame,
       responseBudget,
       sendChatCompletion,
+      speakChatAnswer,
     ],
   );
 
@@ -665,6 +728,14 @@ export function AssistantWorkspace(): React.JSX.Element {
         "system",
         "???? Chat Completions ?????Realtime ??????",
       );
+    }
+
+    if (nextProviderMode === "realtime") {
+      if (isChatSpeechListening) {
+        stopChatSpeechInput();
+      }
+
+      cancelChatSpeech();
     }
 
     setProviderMode(nextProviderMode);
@@ -816,6 +887,32 @@ export function AssistantWorkspace(): React.JSX.Element {
     setMicrophoneMuted(event.currentTarget.checked);
   };
 
+  const handleChatSpeechInputClick = (): void => {
+    if (isChatSpeechListening) {
+      stopChatSpeechInput();
+      addTranscript("system", "??? Chat ?????");
+      return;
+    }
+
+    startChatSpeechInput();
+  };
+
+  const handleChatAnswerSpeechChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): void => {
+    const nextEnabled = event.currentTarget.checked;
+    setIsChatAnswerSpeechEnabled(nextEnabled);
+
+    if (!nextEnabled) {
+      cancelChatSpeech();
+    }
+  };
+
+  const handleCancelChatSpeech = (): void => {
+    cancelChatSpeech();
+    addTranscript("system", "?????????");
+  };
+
   const handleTextDraftChange = (
     event: React.ChangeEvent<HTMLInputElement>,
   ): void => {
@@ -929,6 +1026,7 @@ export function AssistantWorkspace(): React.JSX.Element {
   const canChangeProviderMode =
     !isProviderConfigLoading &&
     !chatState.isSending &&
+    !isChatSpeechListening &&
     realtimeState.status !== "creating-session" &&
     realtimeState.status !== "connecting";
   const canChangeResponseBudget = isChatMode
@@ -942,6 +1040,11 @@ export function AssistantWorkspace(): React.JSX.Element {
   const canSendTextMessage = isChatMode
     ? !chatState.isSending
     : hasRealtimeConnection;
+  const canToggleChatSpeechInput =
+    isChatMode &&
+    hasMedia &&
+    speechState.isRecognitionSupported &&
+    (!chatState.isSending || isChatSpeechListening);
   const canPushToTalk =
     isRealtimeMode &&
     assistantPhase === "listening" &&
@@ -1128,33 +1231,55 @@ export function AssistantWorkspace(): React.JSX.Element {
           </div>
 
           <div className="voice-controls" aria-label="??????">
-            <fieldset className="mode-segment" disabled={!canChangeTurnMode}>
-              <legend>????</legend>
-              <div>
-                {turnDetectionOptions.map((option) => (
-                  <label key={option.value}>
-                    <input
-                      type="radio"
-                      name="turn-detection-mode"
-                      value={option.value}
-                      checked={turnDetectionMode === option.value}
-                      onChange={handleTurnDetectionModeChange}
-                    />
-                    <span>{option.label}</span>
-                  </label>
-                ))}
+            {isChatMode ? (
+              <div className="chat-speech-controls" aria-label="Chat ??????">
+                <button
+                  className="inline-action-button"
+                  type="button"
+                  onClick={handleChatSpeechInputClick}
+                  disabled={!canToggleChatSpeechInput}
+                  aria-pressed={isChatSpeechListening}
+                >
+                  {isChatSpeechListening ? (
+                    <MicOff size={16} aria-hidden="true" />
+                  ) : (
+                    <Mic size={16} aria-hidden="true" />
+                  )}
+                  <span>{isChatSpeechListening ? "????" : "????"}</span>
+                </button>
+                <span>{chatSpeechStatusLabel}</span>
               </div>
-            </fieldset>
+            ) : (
+              <>
+                <fieldset className="mode-segment" disabled={!canChangeTurnMode}>
+                  <legend>????</legend>
+                  <div>
+                    {turnDetectionOptions.map((option) => (
+                      <label key={option.value}>
+                        <input
+                          type="radio"
+                          name="turn-detection-mode"
+                          value={option.value}
+                          checked={turnDetectionMode === option.value}
+                          onChange={handleTurnDetectionModeChange}
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
 
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={isMicrophoneMuted}
-                onChange={handleMicrophoneMutedChange}
-                disabled={!hasMedia || isChatMode}
-              />
-              <span>{isMicrophoneMuted ? "??????" : "?????"}</span>
-            </label>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={isMicrophoneMuted}
+                    onChange={handleMicrophoneMutedChange}
+                    disabled={!hasMedia}
+                  />
+                  <span>{isMicrophoneMuted ? "??????" : "?????"}</span>
+                </label>
+              </>
+            )}
           </div>
 
           <div className="response-controls" aria-label="??????">
@@ -1176,19 +1301,46 @@ export function AssistantWorkspace(): React.JSX.Element {
               </div>
             </fieldset>
 
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={responseMode === "text-only"}
-                onChange={handleResponseModeChange}
-                disabled={isChatMode}
-              />
-              <span>
-                {responseMode === "text-only"
-                  ? "?????"
-                  : "??+????"}
-              </span>
-            </label>
+            {isChatMode ? (
+              <>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={isChatAnswerSpeechEnabled}
+                    onChange={handleChatAnswerSpeechChange}
+                    disabled={!speechState.isSynthesisSupported}
+                  />
+                  <span>
+                    {isChatAnswerSpeechEnabled
+                      ? "Chat ??????"
+                      : "Chat ?????"}
+                  </span>
+                </label>
+
+                <button
+                  className="inline-action-button"
+                  type="button"
+                  onClick={handleCancelChatSpeech}
+                  disabled={!speechState.isSpeaking}
+                >
+                  <Volume2 size={16} aria-hidden="true" />
+                  <span>????</span>
+                </button>
+              </>
+            ) : (
+              <label className="toggle-row">
+                <input
+                  type="checkbox"
+                  checked={responseMode === "text-only"}
+                  onChange={handleResponseModeChange}
+                />
+                <span>
+                  {responseMode === "text-only"
+                    ? "?????"
+                    : "??+????"}
+                </span>
+              </label>
+            )}
           </div>
 
           <div className="sampling-controls" aria-label="??????">

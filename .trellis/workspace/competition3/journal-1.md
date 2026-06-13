@@ -547,3 +547,38 @@ Added a third-party-friendly Chat Completions provider mode with Worker-side cha
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: Chat mode browser speech adapter
+
+**Date**: 2026-06-13
+**Task**: Chat mode browser speech adapter
+**Branch**: `feat/chat-mode-browser-speech-adapter`
+
+### Summary
+
+Added a browser Web Speech adapter for Chat Completions mode, documented the new capability and limitations, and captured the frontend hook contract in Trellis specs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fc36a56` | (see git log) |
+| `cc809f8` | (see git log) |
+| `343b0e6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

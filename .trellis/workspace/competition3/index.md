@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
+- **Total Sessions**: 17
 - **Last Active**: 2026-06-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~549 | Active |
+| `journal-1.md` | ~584 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-06-13 | Chat mode browser speech adapter | `fc36a56`, `cc809f8`, `343b0e6` | `feat/chat-mode-browser-speech-adapter` |
 | 16 | 2026-06-13 | Add Chat Completions provider mode | `3c9a163`, `e8a7360` | `feat/chat-completions-provider-mode` |
 | 15 | 2026-06-13 | Third-party Realtime provider configuration | `79e7ab0`, `4e81d70` | `feat/third-party-realtime-provider` |
 | 14 | 2026-06-13 | Chinese Interface Localization | `9b5e57b`, `1f47863`, `436714e` | `feat/chinese-interface-localization` |
