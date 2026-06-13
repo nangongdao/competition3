@@ -405,6 +405,46 @@ h1 {
   color: #5a4fcf;
 }
 
+.usage-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.usage-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.usage-export-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 6px 9px;
+  color: #111611;
+  font-size: 0.74rem;
+  font-weight: 900;
+  line-height: 1;
+  text-decoration: none;
+  background: rgba(255, 253, 247, 0.9);
+  border: 1px solid rgba(17, 22, 17, 0.22);
+  border-radius: 8px;
+}
+
+.usage-export-button:hover {
+  background: #d7ff65;
+}
+
+.usage-export-button:focus-visible {
+  outline: 3px solid #5a4fcf;
+  outline-offset: 2px;
+}
+
 .usage-headline {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -893,6 +933,15 @@ h1 {
   .state-ring {
     width: 96px;
     height: 96px;
+  }
+
+  .usage-heading-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .usage-export-actions {
+    justify-content: flex-start;
   }
 
   .control-grid,

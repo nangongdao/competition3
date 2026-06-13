@@ -55,6 +55,7 @@ useless input, then cap output, then write down the measured results.**
 | #7 | `feat/push-to-talk-microphone-mute` | Push-to-talk and microphone mute: session-level turn detection mode, PTT audio buffer commit, live `MediaStreamTrack.enabled` mute, Worker payload mapping tests | open, stacked on #6 |
 | pending | `feat/response-budgets` | Response budgets: Worker-enforced output token caps, brief-mode instruction, text-only `response.create` mode, cost-panel policy display, Worker/client tests | in progress |
 | pending | `feat/idle-auto-disconnect` | Idle auto-disconnect: activity-based warning and disconnect timers, transcript notices, cost-panel policy display, client helper tests | in progress |
+| pending | `docs/design-measurement-backfill` | Measurement backfill support: usage-meter JSON/CSV export, repeatable measurement protocol, pending evidence table scaffold | in progress |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission
@@ -163,7 +164,7 @@ fixed 10-minute cap.*
   120 seconds idle. The existing 10-minute hard cap remains unchanged, and the
   cost panel shows the idle close policy.
 
-### 3.5 Design-doc measurement backfill (planned — final cost PR)
+### 3.5 Design-doc measurement backfill (in progress — final cost PR)
 
 *Deliverable lever: the contest asks "which techniques did you consider,
 which did you adopt"; adopted ones need measured evidence.*
@@ -173,6 +174,11 @@ which did you adopt"; adopted ones need measured evidence.*
   push-to-talk vs VAD, brief vs standard budget. Record usage-meter
   buckets and estimated cost per run; backfill a results table into
   `design.md` cost section and final PR descriptions.
+* **Current implementation**: the usage meter can export JSON and CSV reports
+  from the browser. Each export includes a Unix millisecond timestamp, per-turn
+  usage buckets, session totals, and estimated USD cost. `design.md` includes
+  the measurement protocol and a pending results table. The live A/B values
+  still require a configured `OPENAI_API_KEY` and local camera/mic test runs.
 * **Verification**: the table cites the usage meter (authoritative
   `response.done` usage), not hand-waving.
 
@@ -185,7 +191,7 @@ which did you adopt"; adopted ones need measured evidence.*
 | Interface localization (Chinese) | Extract UI strings from `assistant-workspace.tsx` into a copy map; Chinese as default per contest audience | High demo value, zero cost impact; schedule near the end so strings are stable |
 | Cloudflare deployment | `wrangler deploy` with `OPENAI_API_KEY` secret; document the public demo URL in README | Needs the owner's Cloudflare account/decision; everything already runs on Workers |
 | Text-history summarization | After N turns, replace old text items with a compact summary item (client-built, then prune originals) | Real snowball reduction for long chats, but riskier UX (model may "forget" details); frames were the cheap 80% |
-| Session usage export | Download per-turn usage as JSON/CSV from the meter | Useful for the measurement PR; may be absorbed into 3.5 directly |
+| Session usage export | Download per-turn usage as JSON/CSV from the meter | Absorbed into 3.5 as the measurement export path |
 
 ---
 

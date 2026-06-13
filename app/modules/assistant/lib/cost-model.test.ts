@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   accumulateUsage,
+  appendUsageTurn,
+  buildUsageReportExport,
   createEmptyUsage,
   createEmptyUsageReport,
   estimateCostUsd,
@@ -9,7 +11,10 @@ import {
   formatUsd,
   parseResponseUsage,
   REALTIME_PRICES_USD_PER_MILLION,
+  serializeUsageReportCsv,
+  serializeUsageReportJson,
   type UsageBuckets,
+  type UsageReportExport,
 } from "./cost-model";
 
 function buildResponseDoneEvent(usage: unknown): Record<string, unknown> {
@@ -136,6 +141,60 @@ describe("accumulateUsage", () => {
   });
 });
 
+describe("appendUsageTurn", () => {
+  it("adds a timestamped turn and cumulative totals", () => {
+    const usage: UsageBuckets = {
+      ...createEmptyUsage(),
+      inputTokens: 1_000_000,
+      inputTextTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      outputAudioTokens: 1_000_000,
+    };
+
+    const report = appendUsageTurn(
+      createEmptyUsageReport(),
+      usage,
+      1_700_000_000_000,
+    );
+
+    const [turn] = report.turns;
+    if (turn === undefined || report.lastTurn === null) {
+      throw new Error("Expected one usage turn");
+    }
+
+    expect(report.turnCount).toBe(1);
+    expect(report.totals.inputTextTokens).toBe(1_000_000);
+    expect(report.lastTurn.outputAudioTokens).toBe(1_000_000);
+    expect(report.estimatedCostUsd).toBe(68);
+    expect(turn).toEqual({
+      index: 1,
+      recordedAt: 1_700_000_000_000,
+      usage,
+      estimatedCostUsd: 68,
+      cumulativeEstimatedCostUsd: 68,
+    });
+  });
+
+  it("copies the turn usage so later mutation cannot alter the report", () => {
+    const usage: UsageBuckets = {
+      ...createEmptyUsage(),
+      inputTokens: 10,
+      inputImageTokens: 10,
+    };
+
+    const report = appendUsageTurn(createEmptyUsageReport(), usage, 1);
+    usage.inputImageTokens = 999;
+
+    const [turn] = report.turns;
+    if (turn === undefined || report.lastTurn === null) {
+      throw new Error("Expected one usage turn");
+    }
+
+    expect(turn.usage.inputImageTokens).toBe(10);
+    expect(report.lastTurn.inputImageTokens).toBe(10);
+  });
+});
+
 describe("estimateCostUsd", () => {
   it("returns zero for empty usage", () => {
     expect(estimateCostUsd(createEmptyUsage())).toBe(0);
@@ -209,5 +268,80 @@ describe("createEmptyUsageReport", () => {
     expect(report.lastTurn).toBeNull();
     expect(report.estimatedCostUsd).toBe(0);
     expect(report.totals).toEqual(createEmptyUsage());
+    expect(report.turns).toEqual([]);
+  });
+});
+
+describe("usage report export", () => {
+  it("builds a JSON-ready export with metadata, summary, totals, and turns", () => {
+    const report = appendUsageTurn(
+      createEmptyUsageReport(),
+      {
+        ...createEmptyUsage(),
+        inputTokens: 1_000_000,
+        inputAudioTokens: 1_000_000,
+      },
+      1_700_000_000_000,
+    );
+
+    const exported = buildUsageReportExport(report, 1_700_000_001_000);
+
+    expect(exported.metadata).toEqual({
+      schemaVersion: 1,
+      generatedAt: 1_700_000_001_000,
+      source: "openai-realtime-response-done",
+      pricesUsdPerMillion: REALTIME_PRICES_USD_PER_MILLION,
+    });
+    expect(exported.summary).toEqual({
+      turnCount: 1,
+      estimatedCostUsd: 32,
+    });
+    expect(exported.totals.inputAudioTokens).toBe(1_000_000);
+    expect(exported.turns).toHaveLength(1);
+  });
+
+  it("serializes the JSON export with stable generated time", () => {
+    const report = createEmptyUsageReport();
+    const parsed = JSON.parse(
+      serializeUsageReportJson(report, 1_700_000_002_000),
+    ) as UsageReportExport;
+
+    expect(parsed.metadata.generatedAt).toBe(1_700_000_002_000);
+    expect(parsed.summary.turnCount).toBe(0);
+    expect(parsed.lastTurn).toBeNull();
+    expect(parsed.turns).toEqual([]);
+  });
+
+  it("serializes CSV rows for turns plus a totals row", () => {
+    const report = appendUsageTurn(
+      createEmptyUsageReport(),
+      {
+        ...createEmptyUsage(),
+        inputTokens: 1_000_000,
+        inputTextTokens: 1_000_000,
+        outputTokens: 1_000_000,
+        outputAudioTokens: 1_000_000,
+      },
+      1_700_000_003_000,
+    );
+
+    expect(serializeUsageReportCsv(report, 1_700_000_004_000)).toBe(
+      [
+        "row_type,turn_index,recorded_at_ms,input_tokens,input_text_tokens,input_audio_tokens,input_image_tokens,cached_input_tokens,cached_text_tokens,cached_audio_tokens,cached_image_tokens,output_tokens,output_text_tokens,output_audio_tokens,estimated_cost_usd,cumulative_estimated_cost_usd",
+        "turn,1,1700000003000,1000000,1000000,0,0,0,0,0,0,1000000,0,1000000,68,68",
+        "totals,,1700000004000,1000000,1000000,0,0,0,0,0,0,1000000,0,1000000,68,68",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("serializes an empty session CSV with a totals row", () => {
+    expect(serializeUsageReportCsv(createEmptyUsageReport(), 1)).toBe(
+      [
+        "row_type,turn_index,recorded_at_ms,input_tokens,input_text_tokens,input_audio_tokens,input_image_tokens,cached_input_tokens,cached_text_tokens,cached_audio_tokens,cached_image_tokens,output_tokens,output_text_tokens,output_audio_tokens,estimated_cost_usd,cumulative_estimated_cost_usd",
+        "totals,,1,0,0,0,0,0,0,0,0,0,0,0,0,0",
+        "",
+      ].join("\n"),
+    );
   });
 });

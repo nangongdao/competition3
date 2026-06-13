@@ -120,6 +120,27 @@ image in 5, text in 4, text out 16, cached in 0.4):
   90 seconds idle and closes the Realtime connection after about 120 seconds
   idle, while the 10-minute hard cap remains the outer bound.
 
+### Measurement protocol
+
+The app exports the usage meter as JSON or CSV from the browser. The export is
+based on authoritative `response.done` usage events and includes a Unix
+millisecond `generatedAt` timestamp, per-turn token buckets, session totals, and
+estimated USD cost. Use it as the source of truth for the final cost-control
+evidence table.
+
+Run each comparison with the same camera scene, prompt script, response budget,
+and turn count. Start a fresh Realtime session for each row, then download the
+usage report immediately after the final response completes. Keep the raw JSON
+or CSV files with the PR notes so the table below can be audited.
+
+| Lever | Baseline run | Optimized run | Metric to compare | Result |
+| --- | --- | --- | --- | --- |
+| History frame pruning | Pruning off | Pruning on | Last-turn input tokens and image input tokens | Pending live run |
+| Frame-difference sampling | Auto sampling with repeated static scene and diff disabled | Auto sampling with diff enabled | Image input tokens, sent frames, skipped frames | Pending live run |
+| Push-to-talk | Server VAD in a noisy room | Push-to-talk with same background noise | Audio input tokens and turn count | Pending live run |
+| Response budget | Standard audio+text responses | Brief or text-only responses | Output audio/text tokens and estimated cost | Pending live run |
+| Idle auto-disconnect | Session left open until hard cap | Session left idle after final turn | Connected time before close | Pending live run |
+
 ## Current Gaps
 
 * Browser camera and microphone behavior must be manually tested because it
@@ -127,3 +148,6 @@ image in 5, text in 4, text out 16, cached in 0.4):
 * End-to-end Realtime behavior requires `pnpm dev:worker` or deployment with a
   configured `OPENAI_API_KEY`; plain Vite dev mode does not provide the Worker
   API endpoint.
+* The measurement table above still needs live Realtime runs from an environment
+  with `OPENAI_API_KEY`; this local development environment did not expose the
+  key.

@@ -403,3 +403,44 @@ Implemented activity-based Realtime idle warning and auto-disconnect, updated ro
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: Usage report export and measurement protocol
+
+**Date**: 2026-06-13
+**Task**: Usage report export and measurement protocol
+**Branch**: `docs/design-measurement-backfill`
+
+### Summary
+
+Added Realtime usage JSON/CSV export, per-turn usage report tracking, measurement protocol docs, and Trellis spec guidance for evidence-backed cost measurements.
+
+### Main Changes
+
+- Added browser-local JSON and CSV downloads for the Realtime usage meter.
+- Extended usage accounting with timestamped per-turn rows and cumulative estimated cost.
+- Documented the measurement protocol and pending live-run evidence table.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `12567ef` | feat: add usage report export |
+| `1cf0635` | chore(task): add 06-13-design-measurement-backfill |
+
+### Testing
+
+- [OK] git diff --check
+- [OK] corepack pnpm lint
+- [OK] corepack pnpm typecheck
+- [OK] corepack pnpm build
+- [OK] corepack pnpm test
+- [OK] Local Vite smoke returned HTTP 200 at http://127.0.0.1:5173/
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Run live A/B measurement sessions from an environment with `OPENAI_API_KEY` and fill the pending results table.

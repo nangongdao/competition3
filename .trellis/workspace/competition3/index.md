@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
+- **Total Sessions**: 13
 - **Last Active**: 2026-06-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~405 | Active |
+| `journal-1.md` | ~439 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-06-13 | Usage report export and measurement protocol | `12567ef`, `1cf0635` | `docs/design-measurement-backfill` |
 | 12 | 2026-06-13 | Idle auto-disconnect | `7196e1f` | `feat/idle-auto-disconnect` |
 | 11 | 2026-06-13 | Response budgets | `ddf9ac4` | `feat/response-budgets` |
 | 10 | 2026-06-13 | Document GitHub API push fallback | `ce55de7` | `docs/github-api-push-fallback-guidance` |
