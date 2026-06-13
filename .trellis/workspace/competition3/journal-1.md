@@ -139,3 +139,36 @@ Added a text composer to the dialogue board: sendTextMessage in useRealtimeSessi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Realtime usage cost meter
+
+**Date**: 2026-06-13
+**Task**: Realtime usage cost meter
+**Branch**: `feat/realtime-usage-cost-meter`
+
+### Summary
+
+Built the cost measurement foundation: cost-model.ts parses response.done usage into modality buckets with USD estimation (12 unit tests), useRealtimeSession tracks per-turn/cumulative usage, workspace shows usage meter exposing the history re-billing snowball. design.md cost section rewritten around the real pricing model. PR #3 (stacked on #2).
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e3a3e72` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
