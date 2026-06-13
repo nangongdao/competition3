@@ -317,6 +317,18 @@ h1 {
   padding-top: 4px;
 }
 
+.chat-speech-controls {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chat-speech-controls > span {
+  color: #52605b;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
 .provider-controls {
   display: grid;
   gap: 12px;
@@ -394,6 +406,37 @@ h1 {
 }
 
 .mode-segment:disabled span {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inline-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  color: #111611;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 850;
+  background: #fffdf7;
+  border: 1px solid rgba(17, 22, 17, 0.24);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.inline-action-button:not(:disabled):hover {
+  background: #d7ff65;
+}
+
+.inline-action-button:focus-visible {
+  outline: 2px solid #5a4fcf;
+  outline-offset: 2px;
+}
+
+.inline-action-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
