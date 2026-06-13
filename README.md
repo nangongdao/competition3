@@ -17,6 +17,8 @@ boundary in place:
 * Start/stop controls for a browser WebRTC Realtime session
 * Remote assistant audio playback through the WebRTC peer connection
 * Manual and low-frequency visual frame sampling controls
+* Frame-difference gating for automatic sampling, with visible sent/skipped
+  counters to show static-scene upload savings
 * Sampled frame delivery through the Realtime data channel
 * Text message composer for typed questions during a Realtime session
 * Per-session usage meter built from Realtime `response.done` usage events,

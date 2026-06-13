@@ -6,9 +6,9 @@
 > (architecture and user stories) and the contest brief in
 > [`../task.md`](../task.md).
 >
-> Status legend: `shipped` (merged or in an open PR), `planned` (committed
-> direction with a concrete method), `candidate` (worth doing if time
-> allows).
+> Status legend: `shipped` (merged or in an open PR), `in progress`
+> (implemented locally before PR publication), `planned` (committed direction
+> with a concrete method), `candidate` (worth doing if time allows).
 
 ---
 
@@ -51,6 +51,7 @@ useless input, then cap output, then write down the measured results.**
 | #2 | `feat/text-input-dialogue` | Text message composer over the Realtime data channel | open, stacked base |
 | #3 | `feat/realtime-usage-cost-meter` | Usage meter: parses `response.done` usage into modality buckets, USD estimate, last-turn input (snowball indicator); 12 unit tests | open, stacked on #2 |
 | #4 | `feat/history-frame-pruning` | History frame pruning: consumed frame items deleted via `conversation.item.delete` (pending -> in-flight -> consumed tracker, `evt_prune_` tagged deletes, silenced races); toggle + pruned counter; 10 unit tests | open, stacked on #3 |
+| pending | `feat/frame-difference-sampling` | Frame-difference sampling: downscaled luma diff skips low-change interval uploads, manual frame actions bypass the gate, sent/skipped counters show savings; 8 unit tests | in progress |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission
@@ -64,7 +65,7 @@ session cap, key-safe server-side session creation.
 Ordered by leverage. Each entry lists the method concretely enough that a
 future session can implement it without re-deriving the design.
 
-### 3.1 Frame-difference sampling (planned — next)
+### 3.1 Frame-difference sampling (in progress)
 
 *Cost lever: stop uploading frames that carry no new information.*
 
