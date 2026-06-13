@@ -140,7 +140,7 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return "Realtime session failed.";
+  return "Realtime 会话失败。";
 }
 
 function getServerEventErrorMessage(event: Record<string, unknown>): string {
@@ -160,7 +160,7 @@ function getServerEventErrorMessage(event: Record<string, unknown>): string {
     }
   }
 
-  return "The Realtime service reported an error.";
+  return "Realtime 服务返回了错误。";
 }
 
 function getSessionClientSecret(session: unknown): string | null {
@@ -229,18 +229,34 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   );
 }
 
+function getLocalizedApiErrorMessage(errorResponse: ApiErrorResponse): string {
+  if (errorResponse.code === "missing_openai_api_key") {
+    return "Worker 尚未配置 OPENAI_API_KEY，无法启动 Realtime 会话。";
+  }
+
+  if (errorResponse.code === "invalid_request") {
+    return "Realtime 会话请求参数无效。";
+  }
+
+  if (errorResponse.code === "openai_session_failed") {
+    return `OpenAI 会话创建失败：${errorResponse.error}`;
+  }
+
+  return errorResponse.error;
+}
+
 async function readSessionError(response: Response): Promise<string> {
   try {
     const value = (await response.json()) as unknown;
 
     if (isApiErrorResponse(value)) {
-      return value.error;
+      return getLocalizedApiErrorMessage(value);
     }
   } catch {
-    return `Realtime session request failed with status ${response.status}.`;
+    return `Realtime 会话请求失败，状态码 ${response.status}。`;
   }
 
-  return `Realtime session request failed with status ${response.status}.`;
+  return `Realtime 会话请求失败，状态码 ${response.status}。`;
 }
 
 async function createRealtimeSession(
@@ -271,7 +287,7 @@ async function createRealtimeSession(
   const value = (await response.json()) as unknown;
 
   if (!isRealtimeSessionSuccessResponse(value)) {
-    throw new Error("Realtime session response did not match the expected contract.");
+    throw new Error("Realtime 会话响应不符合预期契约。");
   }
 
   return value;
@@ -284,7 +300,7 @@ async function readSdpError(response: Response): Promise<string> {
     return message;
   }
 
-  return `Realtime WebRTC offer failed with status ${response.status}.`;
+  return `Realtime WebRTC offer 失败，状态码 ${response.status}。`;
 }
 
 function parseServerEvent(data: string): Record<string, unknown> | null {
@@ -304,7 +320,7 @@ function waitForDataChannelOpen(dataChannel: RTCDataChannel): Promise<void> {
   return new Promise((resolve, reject) => {
     const timeoutId = window.setTimeout(() => {
       cleanup();
-      reject(new Error("Realtime data channel did not open in time."));
+      reject(new Error("Realtime 数据通道未在限定时间内打开。"));
     }, DATA_CHANNEL_OPEN_TIMEOUT_MS);
 
     const handleOpen = (): void => {
@@ -314,7 +330,7 @@ function waitForDataChannelOpen(dataChannel: RTCDataChannel): Promise<void> {
 
     const handleFailure = (): void => {
       cleanup();
-      reject(new Error("Realtime data channel failed to open."));
+      reject(new Error("Realtime 数据通道打开失败。"));
     };
 
     const cleanup = (): void => {
@@ -711,7 +727,7 @@ export function useRealtimeSession({
     (maxSessionSeconds: number): void => {
       clearSessionTimer();
       sessionTimerIdRef.current = window.setTimeout(() => {
-        onTranscript("system", "Session time limit reached. Realtime connection closed.");
+        onTranscript("system", "会话已达到时间上限，Realtime 连接已关闭。");
         onPhaseChange("ready");
         closeConnection("idle");
       }, maxSessionSeconds * 1000);
@@ -740,7 +756,7 @@ export function useRealtimeSession({
         hasIdleWarningRef.current = true;
         onTranscript(
           "system",
-          "No Realtime activity for 90 seconds. The session will close after 120 seconds idle.",
+          "90 秒内没有 Realtime 活动。空闲满 120 秒后会自动关闭会话。",
         );
         return;
       }
@@ -748,7 +764,7 @@ export function useRealtimeSession({
       if (decision === "disconnect") {
         onTranscript(
           "system",
-          "Realtime session closed after 120 seconds idle.",
+          "Realtime 会话已在空闲 120 秒后自动关闭。",
         );
         onPhaseChange("ready");
         closeConnection("idle");
@@ -765,7 +781,7 @@ export function useRealtimeSession({
   const startSession = useCallback(
     async (input: StartRealtimeSessionInput): Promise<boolean> => {
       if (stream === null) {
-        const message = "Grant camera and microphone access before starting Realtime.";
+        const message = "启动 Realtime 前请先授权摄像头和麦克风。";
         setRealtimeState({
           status: "error",
           errorMessage: message,
@@ -780,7 +796,7 @@ export function useRealtimeSession({
       const audioTrack = stream.getAudioTracks()[0];
 
       if (audioTrack === undefined) {
-        const message = "No microphone audio track is available for Realtime.";
+        const message = "当前没有可用于 Realtime 的麦克风音频轨道。";
         setRealtimeState({
           status: "error",
           errorMessage: message,
@@ -793,7 +809,7 @@ export function useRealtimeSession({
       }
 
       if (typeof RTCPeerConnection === "undefined") {
-        const message = "This browser does not support WebRTC peer connections.";
+        const message = "当前浏览器不支持 WebRTC 点对点连接。";
         setRealtimeState({
           status: "error",
           errorMessage: message,
@@ -827,7 +843,7 @@ export function useRealtimeSession({
         const clientSecret = getSessionClientSecret(sessionResponse.session);
 
         if (clientSecret === null) {
-          throw new Error("Realtime session did not include a client secret.");
+          throw new Error("Realtime 会话没有返回临时客户端密钥。");
         }
 
         const model = getSessionModel(sessionResponse.session);
@@ -847,9 +863,9 @@ export function useRealtimeSession({
             setRealtimeState((current) => ({
               ...current,
               status: "error",
-              errorMessage: "Realtime peer connection failed.",
+              errorMessage: "Realtime 点对点连接失败。",
             }));
-            onTranscript("system", "Realtime peer connection failed.");
+            onTranscript("system", "Realtime 点对点连接失败。");
             onPhaseChange("error");
           }
         });
@@ -888,7 +904,7 @@ export function useRealtimeSession({
         await peerConnection.setLocalDescription(offer);
 
         if (peerConnection.localDescription === null) {
-          throw new Error("Browser did not create a local WebRTC offer.");
+          throw new Error("浏览器没有创建本地 WebRTC offer。");
         }
 
         setRealtimeState({
@@ -927,7 +943,7 @@ export function useRealtimeSession({
           costPolicy: sessionResponse.costPolicy,
           peerConnectionState: peerConnection.connectionState,
         });
-        onTranscript("system", "Realtime session connected.");
+        onTranscript("system", "Realtime 会话已连接。");
         onPhaseChange("listening");
         return true;
       } catch (error: unknown) {

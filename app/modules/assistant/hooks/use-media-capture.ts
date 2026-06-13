@@ -31,14 +31,14 @@ function getMediaErrorState(error: unknown): MediaPermissionState {
     if (error.name === "NotAllowedError" || error.name === "SecurityError") {
       return {
         status: "denied",
-        errorMessage: "The browser denied camera or microphone access.",
+        errorMessage: "浏览器拒绝了摄像头或麦克风访问。",
       };
     }
 
     if (error.name === "NotFoundError") {
       return {
         status: "error",
-        errorMessage: "No available camera or microphone device was detected.",
+        errorMessage: "未检测到可用的摄像头或麦克风设备。",
       };
     }
   }
@@ -46,7 +46,7 @@ function getMediaErrorState(error: unknown): MediaPermissionState {
   return {
     status: "error",
     errorMessage:
-      "Media device startup failed. Check browser permissions and device usage.",
+      "媒体设备启动失败，请检查浏览器权限和设备占用情况。",
   };
 }
 
@@ -68,7 +68,7 @@ export function useMediaCapture(): UseMediaCaptureResult {
       setMediaState({
         status: "unsupported",
         errorMessage:
-          "This browser does not support camera and microphone capture.",
+          "当前浏览器不支持摄像头和麦克风采集。",
       });
       return;
     }

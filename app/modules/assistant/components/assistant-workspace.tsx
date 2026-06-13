@@ -55,47 +55,47 @@ const initialTranscript: readonly TranscriptEntry[] = [
   {
     id: "entry-0",
     speaker: "system",
-    text: "Media workspace is ready.",
+    text: "媒体工作区已就绪。",
     createdAt: Date.now(),
   },
   {
     id: "entry-1",
     speaker: "assistant",
-    text: "Realtime voice is available when the Worker has OPENAI_API_KEY configured.",
+    text: "Worker 配置 OPENAI_API_KEY 后即可启用 Realtime 语音对话。",
     createdAt: Date.now(),
   },
 ] as const;
 
 const phaseLabels: Record<AssistantPhase, string> = {
-  idle: "Waiting",
-  ready: "Media ready",
-  connecting: "Connecting",
-  listening: "Listening",
-  thinking: "Thinking",
-  responding: "Responding",
-  error: "Action needed",
+  idle: "等待中",
+  ready: "媒体已就绪",
+  connecting: "连接中",
+  listening: "聆听中",
+  thinking: "思考中",
+  responding: "回复中",
+  error: "需要处理",
 };
 
 const mediaLabels: Record<MediaPermissionStatus, string> = {
-  idle: "Not granted",
-  requesting: "Requesting",
-  granted: "Granted",
-  denied: "Denied",
-  unsupported: "Unsupported",
-  error: "Error",
+  idle: "未授权",
+  requesting: "请求中",
+  granted: "已授权",
+  denied: "已拒绝",
+  unsupported: "不支持",
+  error: "错误",
 };
 
 const realtimeLabels: Record<RealtimeConnectionStatus, string> = {
-  idle: "Not connected",
-  "creating-session": "Creating session",
-  connecting: "Connecting",
-  connected: "Connected",
-  error: "Error",
+  idle: "未连接",
+  "creating-session": "创建会话",
+  connecting: "连接中",
+  connected: "已连接",
+  error: "错误",
 };
 
 const turnDetectionLabels: Record<RealtimeTurnDetectionMode, string> = {
-  "server-vad": "Server VAD",
-  "push-to-talk": "Push-to-talk",
+  "server-vad": "服务器 VAD",
+  "push-to-talk": "按住说话",
 };
 
 const turnDetectionOptions: readonly {
@@ -104,18 +104,18 @@ const turnDetectionOptions: readonly {
 }[] = [
   {
     value: "server-vad",
-    label: "Server VAD",
+    label: "服务器 VAD",
   },
   {
     value: "push-to-talk",
-    label: "Push-to-talk",
+    label: "按住说话",
   },
 ] as const;
 
 const responseBudgetLabels: Record<RealtimeResponseBudget, string> = {
-  brief: "Brief",
-  standard: "Standard",
-  detailed: "Detailed",
+  brief: "简短",
+  standard: "标准",
+  detailed: "详细",
 };
 
 const responseBudgetOptions: readonly {
@@ -124,25 +124,25 @@ const responseBudgetOptions: readonly {
 }[] = [
   {
     value: "brief",
-    label: "Brief",
+    label: "简短",
   },
   {
     value: "standard",
-    label: "Standard",
+    label: "标准",
   },
   {
     value: "detailed",
-    label: "Detailed",
+    label: "详细",
   },
 ] as const;
 
 const responseModeLabels: Record<RealtimeResponseMode, string> = {
-  "audio-text": "Audio + text",
-  "text-only": "Text only",
+  "audio-text": "语音+文字",
+  "text-only": "仅文字",
 };
 
 function formatEntryTime(timestamp: number): string {
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -155,10 +155,10 @@ function getSpeakerLabel(speaker: TranscriptSpeaker): string {
   }
 
   if (speaker === "user") {
-    return "You";
+    return "你";
   }
 
-  return "System";
+  return "系统";
 }
 
 function isActiveSession(phase: AssistantPhase): boolean {
@@ -275,77 +275,77 @@ export function AssistantWorkspace(): React.JSX.Element {
     realtimeState.costPolicy?.responseBudget ?? responseBudget;
   const isPushToTalkMode = activeTurnDetectionMode === "push-to-talk";
   const microphoneStatusLabel = !hasMedia
-    ? "Mic off"
+    ? "麦克风关闭"
     : isMicrophoneMuted
-      ? "Mic muted"
+      ? "麦克风已静音"
       : isPushToTalkMode
         ? isPushToTalkActive
-          ? "PTT live"
-          : "PTT idle"
-        : "Mic armed";
+          ? "按住说话中"
+          : "等待按住说话"
+        : "麦克风已启用";
   const costControls: readonly CostControlSetting[] = [
     {
-      label: "Frame budget",
+      label: "画面预算",
       value:
         realtimeState.costPolicy?.visualContextMode ??
-        (isAutoSampling ? "interval" : "manual"),
-      detail: "Video frames are sampled, not streamed continuously.",
+        (isAutoSampling ? "定时采样" : "手动采样"),
+      detail: "只采样关键画面，不连续上传原始视频。",
     },
     {
-      label: "Session cap",
+      label: "会话上限",
       value: realtimeState.costPolicy
-        ? `${Math.round(realtimeState.costPolicy.maxSessionSeconds / 60)} min`
-        : "10 min",
-      detail: "The browser closes long Realtime sessions automatically.",
+        ? `${Math.round(realtimeState.costPolicy.maxSessionSeconds / 60)} 分钟`
+        : "10 分钟",
+      detail: "浏览器会自动关闭过长的 Realtime 会话。",
     },
     {
-      label: "Idle close",
-      value: `${Math.round(REALTIME_IDLE_DISCONNECT_MS / 1000)}s`,
-      detail: `Warns after ${Math.round(
+      label: "空闲关闭",
+      value: `${Math.round(REALTIME_IDLE_DISCONNECT_MS / 1000)} 秒`,
+      detail: `${Math.round(
         REALTIME_IDLE_WARNING_MS / 1000,
-      )}s without speech, text, frames, or responses.`,
+      )} 秒无语音、文字、画面或回复后提醒。`,
     },
     {
-      label: "Response cap",
+      label: "回复上限",
       value: realtimeState.costPolicy
         ? `${responseBudgetLabels[activeResponseBudget]} / ${formatTokens(
             realtimeState.costPolicy.maxResponseOutputTokens,
           )}`
         : responseBudgetLabels[activeResponseBudget],
-      detail: "The Worker caps max response output tokens.",
+      detail: "Worker 会限制单次回复的最大输出 token。",
     },
     {
-      label: "Response mode",
+      label: "回复模式",
       value: responseModeLabels[responseMode],
       detail:
         responseMode === "text-only"
-          ? "Responses skip assistant audio output."
-          : "Responses include assistant audio and transcript text.",
+          ? "回复不生成助手语音输出。"
+          : "回复包含助手语音和转写文字。",
     },
     {
-      label: "Cloud key",
-      value: "server",
-      detail: "Permanent model keys stay in the Worker.",
+      label: "云端密钥",
+      value: "服务端",
+      detail: "长期模型密钥只保存在 Worker 中。",
     },
     {
-      label: "Voice turn",
+      label: "语音轮次",
       value: turnDetectionLabels[activeTurnDetectionMode],
       detail:
         activeTurnDetectionMode === "push-to-talk"
-          ? "Audio turns are committed only from the hold control."
-          : "Server VAD can answer hands-free speech.",
+          ? "只有按住说话控件会提交语音轮次。"
+          : "服务器 VAD 可自动识别免手动语音。",
     },
     {
-      label: "Microphone",
+      label: "麦克风",
       value: microphoneStatusLabel,
       detail: isMicrophoneMuted
-        ? "The local audio track is disabled."
-        : "The local audio track follows the active turn mode.",
+        ? "本地音频轨道已禁用。"
+        : "本地音频轨道跟随当前语音模式。",
     },
     {
-      label: "Auto diff",
+      label: "自动差分",
       value: `${Math.round(FRAME_DIFF_SEND_THRESHOLD * 100)}%`,
-      detail: "Interval uploads skip frames below this luma change.",
+      detail: "定时上传会跳过低于该亮度变化的画面。",
     },
   ] as const;
 
@@ -362,7 +362,7 @@ export function AssistantWorkspace(): React.JSX.Element {
         videoElement.videoHeight === 0
       ) {
         if (source === "manual") {
-          addTranscript("system", "No camera frame is available to sample yet.");
+          addTranscript("system", "当前还没有可采样的摄像头画面。");
         }
 
         return null;
@@ -377,7 +377,7 @@ export function AssistantWorkspace(): React.JSX.Element {
 
       if (context === null) {
         if (source === "manual") {
-          addTranscript("system", "The browser could not create a frame canvas.");
+          addTranscript("system", "浏览器无法创建画面采样画布。");
         }
 
         return null;
@@ -394,7 +394,7 @@ export function AssistantWorkspace(): React.JSX.Element {
         if (source === "manual") {
           addTranscript(
             "system",
-            "The browser could not analyze the current camera frame.",
+            "浏览器无法分析当前摄像头画面。",
           );
         }
 
@@ -406,7 +406,7 @@ export function AssistantWorkspace(): React.JSX.Element {
       setSampledFrameCount((currentCount) => currentCount + 1);
 
       if (source === "manual") {
-        addTranscript("system", "Sampled one visual context frame.");
+        addTranscript("system", "已采样一帧视觉上下文。");
       }
 
       return {
@@ -427,7 +427,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     stopRealtimeSession();
 
     if (shouldLogStop) {
-      addTranscript("system", "Session stopped. Media permission remains available.");
+      addTranscript("system", "会话已停止，媒体权限仍然可用。");
     }
 
     setAssistantPhase(mediaState.status === "granted" ? "ready" : "idle");
@@ -516,7 +516,7 @@ export function AssistantWorkspace(): React.JSX.Element {
       const sent = sendVisualContext({
         frameDataUrl: capturedFrame.frameDataUrl,
         prompt:
-          "Background visual context refresh. Use this sampled camera frame as context for the next answer, but do not respond yet.",
+          "后台视觉上下文刷新。请把这帧摄像头画面作为下一次回答的上下文，但暂时不要回复。",
         requestResponse: false,
       });
 
@@ -552,17 +552,17 @@ export function AssistantWorkspace(): React.JSX.Element {
     setSentFrameCount(0);
     setSkippedAutoFrameCount(0);
     setMicrophoneMuted(false);
-    addTranscript("system", "Camera and microphone tracks were released.");
+    addTranscript("system", "摄像头和麦克风轨道已释放。");
   };
 
   const handleStartSession = (): void => {
     if (mediaState.status !== "granted") {
       setAssistantPhase("error");
-      addTranscript("system", "Grant camera and microphone access first.");
+      addTranscript("system", "请先授权摄像头和麦克风。");
       return;
     }
 
-    addTranscript("system", "Creating a key-safe Realtime session.");
+    addTranscript("system", "正在创建密钥安全的 Realtime 会话。");
     lastUploadedFrameSignatureRef.current = null;
     setSentFrameCount(0);
     setSkippedAutoFrameCount(0);
@@ -571,7 +571,7 @@ export function AssistantWorkspace(): React.JSX.Element {
       turnDetectionMode,
       responseBudget,
       instructions:
-        "You are a concise visual dialogue assistant. Use microphone audio for conversation and use sampled camera frames only when the client sends them.",
+        "你是一个简洁的中文视觉对话助手。使用麦克风音频进行对话，仅在客户端发送采样摄像头画面时使用视觉上下文。",
     });
   };
 
@@ -586,7 +586,7 @@ export function AssistantWorkspace(): React.JSX.Element {
       return;
     }
 
-    const prompt = "Describe what I should pay attention to in the current scene.";
+    const prompt = "请描述当前画面中我应该注意什么。";
     addTranscript("user", prompt);
 
     const sent = sendVisualContext({
@@ -597,12 +597,12 @@ export function AssistantWorkspace(): React.JSX.Element {
 
     if (sent) {
       recordUploadedFrame(capturedFrame.signature);
-      addTranscript("system", "Sent one sampled frame to the Realtime model.");
+      addTranscript("system", "已向 Realtime 模型发送一帧采样画面。");
       return;
     }
 
     setAssistantPhase("error");
-    addTranscript("system", "Realtime data channel is not ready for visual context.");
+    addTranscript("system", "Realtime 数据通道还不能发送视觉上下文。");
   };
 
   const handleManualFrameCapture = (): void => {
@@ -612,13 +612,13 @@ export function AssistantWorkspace(): React.JSX.Element {
       const sent = sendVisualContext({
         frameDataUrl: capturedFrame.frameDataUrl,
         prompt:
-          "Use this sampled camera frame as visual context for the next answer. Do not respond yet.",
+          "请把这帧摄像头画面作为下一次回答的视觉上下文，暂时不要回复。",
         requestResponse: false,
       });
 
       if (sent) {
         recordUploadedFrame(capturedFrame.signature);
-        addTranscript("system", "Sent sampled frame as Realtime visual context.");
+        addTranscript("system", "已将采样画面发送为 Realtime 视觉上下文。");
       }
     }
   };
@@ -691,7 +691,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     if (!hasRealtimeConnection) {
       addTranscript(
         "system",
-        "Start a Realtime session before sending text messages.",
+        "请先启动 Realtime 会话，再发送文字消息。",
       );
       return;
     }
@@ -699,7 +699,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     const sent = sendTextMessage(message);
 
     if (!sent) {
-      addTranscript("system", "Realtime data channel is not ready for text input.");
+      addTranscript("system", "Realtime 数据通道还不能发送文字输入。");
       return;
     }
 
@@ -787,8 +787,8 @@ export function AssistantWorkspace(): React.JSX.Element {
   const visibleError = mediaState.errorMessage ?? realtimeState.errorMessage;
   const realtimeDetail =
     realtimeState.peerConnectionState === null
-      ? "Worker-issued client secret required"
-      : `Peer ${realtimeState.peerConnectionState}`;
+      ? "需要 Worker 签发的临时客户端密钥"
+      : `连接状态：${realtimeState.peerConnectionState}`;
 
   return (
     <main className="assistant-shell">
@@ -798,24 +798,24 @@ export function AssistantWorkspace(): React.JSX.Element {
             <Radio size={25} strokeWidth={2.2} />
           </div>
           <div>
-            <p className="eyebrow">AI visual dialogue</p>
-            <h1 id="assistant-title">Visual Dialogue Assistant</h1>
+            <p className="eyebrow">AI 视觉对话</p>
+            <h1 id="assistant-title">视觉对话助手</h1>
           </div>
         </div>
 
-        <div className="state-panel" aria-label="Session state">
+        <div className="state-panel" aria-label="会话状态">
           <div className="state-ring" data-phase={assistantPhase}>
             <span>{phaseLabels[assistantPhase]}</span>
           </div>
           <div className="state-copy">
-            <p>Media</p>
+            <p>媒体</p>
             <strong>{mediaLabels[mediaState.status]}</strong>
-            <span>{hasMedia ? "Camera + microphone live" : "Waiting for device access"}</span>
+            <span>{hasMedia ? "摄像头和麦克风已开启" : "等待设备授权"}</span>
             <p>Realtime</p>
             <strong>{realtimeLabels[realtimeState.status]}</strong>
             <span>
               {hasRealtimeConnection
-                ? "Voice transport and data channel ready"
+                ? "语音传输和数据通道已就绪"
                 : realtimeDetail}
             </span>
           </div>
@@ -827,7 +827,7 @@ export function AssistantWorkspace(): React.JSX.Element {
           </p>
         ) : null}
 
-        <div className="control-grid" aria-label="Session controls">
+        <div className="control-grid" aria-label="会话控制">
           <button
             className="control-button primary"
             type="button"
@@ -835,7 +835,7 @@ export function AssistantWorkspace(): React.JSX.Element {
             disabled={mediaState.status === "requesting"}
           >
             <Camera size={18} aria-hidden="true" />
-            <span>{hasMedia ? "Refresh media" : "Allow media"}</span>
+            <span>{hasMedia ? "刷新媒体" : "授权媒体"}</span>
           </button>
 
           <button
@@ -848,8 +848,8 @@ export function AssistantWorkspace(): React.JSX.Element {
             <span>
               {realtimeState.status === "creating-session" ||
               realtimeState.status === "connecting"
-                ? "Connecting"
-                : "Start session"}
+                ? "连接中"
+                : "开始会话"}
             </span>
           </button>
 
@@ -866,7 +866,7 @@ export function AssistantWorkspace(): React.JSX.Element {
             aria-pressed={isPushToTalkActive}
           >
             <Hand size={18} aria-hidden="true" />
-            <span>{isPushToTalkActive ? "Speaking" : "Hold to talk"}</span>
+            <span>{isPushToTalkActive ? "正在说话" : "按住说话"}</span>
           </button>
 
           <button
@@ -876,7 +876,7 @@ export function AssistantWorkspace(): React.JSX.Element {
             disabled={!canRealtimeTurn}
           >
             <Sparkles size={18} aria-hidden="true" />
-            <span>Ask with frame</span>
+            <span>发送画面提问</span>
           </button>
 
           <button
@@ -886,7 +886,7 @@ export function AssistantWorkspace(): React.JSX.Element {
             disabled={!hasMedia}
           >
             <ImageIcon size={18} aria-hidden="true" />
-            <span>Sample frame</span>
+            <span>采样画面</span>
           </button>
 
           <button
@@ -896,7 +896,7 @@ export function AssistantWorkspace(): React.JSX.Element {
             disabled={!canStopSession}
           >
             <CircleStop size={18} aria-hidden="true" />
-            <span>Stop session</span>
+            <span>停止会话</span>
           </button>
         </div>
 
@@ -907,13 +907,13 @@ export function AssistantWorkspace(): React.JSX.Element {
           disabled={!hasMedia}
         >
           <RefreshCcw size={17} aria-hidden="true" />
-          Release camera and microphone
+          释放摄像头和麦克风
         </button>
 
-        <div className="cost-panel" aria-label="Cost controls">
+        <div className="cost-panel" aria-label="成本控制">
           <div className="panel-heading">
             <Gauge size={18} aria-hidden="true" />
-            <span>Cost controls</span>
+            <span>成本控制</span>
           </div>
           <dl>
             {costControls.map((item) => (
@@ -927,9 +927,9 @@ export function AssistantWorkspace(): React.JSX.Element {
             ))}
           </dl>
 
-          <div className="voice-controls" aria-label="Voice input settings">
+          <div className="voice-controls" aria-label="语音输入设置">
             <fieldset className="mode-segment" disabled={!canChangeTurnMode}>
-              <legend>Turn mode</legend>
+              <legend>语音模式</legend>
               <div>
                 {turnDetectionOptions.map((option) => (
                   <label key={option.value}>
@@ -953,13 +953,13 @@ export function AssistantWorkspace(): React.JSX.Element {
                 onChange={handleMicrophoneMutedChange}
                 disabled={!hasMedia}
               />
-              <span>{isMicrophoneMuted ? "Microphone muted" : "Microphone live"}</span>
+              <span>{isMicrophoneMuted ? "麦克风已静音" : "麦克风开启"}</span>
             </label>
           </div>
 
-          <div className="response-controls" aria-label="Response output settings">
+          <div className="response-controls" aria-label="回复输出设置">
             <fieldset className="mode-segment" disabled={!canChangeResponseBudget}>
-              <legend>Response budget</legend>
+              <legend>回复预算</legend>
               <div>
                 {responseBudgetOptions.map((option) => (
                   <label key={option.value}>
@@ -984,13 +984,13 @@ export function AssistantWorkspace(): React.JSX.Element {
               />
               <span>
                 {responseMode === "text-only"
-                  ? "Text-only responses"
-                  : "Audio + text responses"}
+                  ? "仅文字回复"
+                  : "语音+文字回复"}
               </span>
             </label>
           </div>
 
-          <div className="sampling-controls" aria-label="Frame sampling settings">
+          <div className="sampling-controls" aria-label="画面采样设置">
             <label className="toggle-row">
               <input
                 type="checkbox"
@@ -998,11 +998,11 @@ export function AssistantWorkspace(): React.JSX.Element {
                 onChange={handleAutoSamplingChange}
                 disabled={!hasMedia}
               />
-              <span>Low-frequency auto sampling</span>
+              <span>低频自动采样</span>
             </label>
 
             <label className="range-row">
-              <span>Interval</span>
+              <span>间隔</span>
               <input
                 type="range"
                 min="5"
@@ -1012,7 +1012,7 @@ export function AssistantWorkspace(): React.JSX.Element {
                 onChange={handleSamplingIntervalChange}
                 disabled={!hasMedia || !isAutoSampling}
               />
-              <strong>{samplingIntervalSeconds}s</strong>
+              <strong>{samplingIntervalSeconds} 秒</strong>
             </label>
 
             <label className="toggle-row">
@@ -1021,18 +1021,18 @@ export function AssistantWorkspace(): React.JSX.Element {
                 checked={isFramePruningEnabled}
                 onChange={handleFramePruningChange}
               />
-              <span>Prune consumed frames from history</span>
+              <span>从历史中裁剪已消费画面</span>
             </label>
           </div>
         </div>
 
-        <div className="usage-panel" aria-label="Realtime usage meter">
+        <div className="usage-panel" aria-label="Realtime 用量计">
           <div className="usage-heading-row">
             <div className="panel-heading">
               <Activity size={18} aria-hidden="true" />
-              <span>Usage meter</span>
+              <span>用量计</span>
             </div>
-            <div className="usage-export-actions" aria-label="Usage export">
+            <div className="usage-export-actions" aria-label="用量导出">
               <a
                 className="usage-export-button"
                 href={usageExport.jsonDownloadUrl}
@@ -1054,15 +1054,15 @@ export function AssistantWorkspace(): React.JSX.Element {
 
           <dl className="usage-headline">
             <div>
-              <dt>Turns</dt>
+              <dt>轮次</dt>
               <dd>{usageReport.turnCount}</dd>
             </div>
             <div>
-              <dt>Est. cost</dt>
+              <dt>预估成本</dt>
               <dd>{formatUsd(usageReport.estimatedCostUsd)}</dd>
             </div>
             <div>
-              <dt>Last turn input</dt>
+              <dt>上轮输入</dt>
               <dd>
                 {usageReport.lastTurn
                   ? formatTokens(usageReport.lastTurn.inputTokens)
@@ -1073,35 +1073,34 @@ export function AssistantWorkspace(): React.JSX.Element {
 
           <dl className="usage-breakdown">
             <div>
-              <dt>Audio in</dt>
+              <dt>音频输入</dt>
               <dd>{formatTokens(usageReport.totals.inputAudioTokens)}</dd>
             </div>
             <div>
-              <dt>Image in</dt>
+              <dt>图像输入</dt>
               <dd>{formatTokens(usageReport.totals.inputImageTokens)}</dd>
             </div>
             <div>
-              <dt>Text in</dt>
+              <dt>文字输入</dt>
               <dd>{formatTokens(usageReport.totals.inputTextTokens)}</dd>
             </div>
             <div>
-              <dt>Cached in</dt>
+              <dt>缓存输入</dt>
               <dd>{formatTokens(usageReport.totals.cachedInputTokens)}</dd>
             </div>
             <div>
-              <dt>Audio out</dt>
+              <dt>音频输出</dt>
               <dd>{formatTokens(usageReport.totals.outputAudioTokens)}</dd>
             </div>
             <div>
-              <dt>Text out</dt>
+              <dt>文字输出</dt>
               <dd>{formatTokens(usageReport.totals.outputTextTokens)}</dd>
             </div>
           </dl>
 
           <p className="usage-note">
-            Token usage is reported by the Realtime API per response. Each turn
-            re-bills the conversation history as input, so a growing last-turn
-            input means context is snowballing. Cost is an estimate.
+            Token 用量由 Realtime API 按回复上报。每一轮都会把对话历史重新计为输入，
+            因此上轮输入持续增长代表上下文成本正在滚大。成本为估算值。
           </p>
         </div>
       </section>
@@ -1114,27 +1113,27 @@ export function AssistantWorkspace(): React.JSX.Element {
             autoPlay
             muted
             playsInline
-            aria-label="Live camera preview"
+            aria-label="实时摄像头预览"
           />
           <audio
             ref={audioRef}
             className="remote-audio"
             autoPlay
-            aria-label="Assistant audio response"
+            aria-label="助手语音回复"
           />
 
           {!hasMedia ? (
             <div className="camera-empty">
               <Video size={34} aria-hidden="true" />
-              <h2 id="vision-title">Waiting for video</h2>
-              <p>Live camera preview appears after media permission is granted.</p>
+              <h2 id="vision-title">等待视频</h2>
+              <p>授权媒体权限后会显示实时摄像头预览。</p>
             </div>
           ) : null}
 
-          <div className="camera-hud" aria-label="Live device status">
+          <div className="camera-hud" aria-label="实时设备状态">
             <span>
               <Camera size={15} aria-hidden="true" />
-              {hasMedia ? "Camera live" : "Camera off"}
+              {hasMedia ? "摄像头开启" : "摄像头关闭"}
             </span>
             <span>
               {isMicrophoneMuted ? (
@@ -1155,51 +1154,51 @@ export function AssistantWorkspace(): React.JSX.Element {
           </div>
         </div>
 
-        <div className="visual-context-panel" aria-label="Sampled visual context">
+        <div className="visual-context-panel" aria-label="已采样视觉上下文">
           <div className="panel-heading">
             <ImageIcon size={18} aria-hidden="true" />
-            <span>Visual context</span>
+            <span>视觉上下文</span>
           </div>
 
           <div className="frame-sample">
             {lastFrameDataUrl ? (
-              <img src={lastFrameDataUrl} alt="Last sampled camera frame" />
+              <img src={lastFrameDataUrl} alt="最近采样的摄像头画面" />
             ) : (
               <div className="frame-placeholder">
                 <ImageIcon size={22} aria-hidden="true" />
-                <span>No sampled frame</span>
+                <span>暂无采样画面</span>
               </div>
             )}
           </div>
 
           <dl className="frame-stats">
             <div>
-              <dt>Sampled</dt>
+              <dt>已采样</dt>
               <dd>{sampledFrameCount}</dd>
             </div>
             <div>
-              <dt>Sent</dt>
+              <dt>已发送</dt>
               <dd>{sentFrameCount}</dd>
             </div>
             <div>
-              <dt>Skipped</dt>
+              <dt>已跳过</dt>
               <dd>{skippedAutoFrameCount}</dd>
             </div>
             <div>
-              <dt>Pruned</dt>
+              <dt>已裁剪</dt>
               <dd>{prunedFrameCount}</dd>
             </div>
             <div>
-              <dt>Mode</dt>
-              <dd>{isAutoSampling ? `${samplingIntervalSeconds}s` : "manual"}</dd>
+              <dt>模式</dt>
+              <dd>{isAutoSampling ? `${samplingIntervalSeconds} 秒` : "手动"}</dd>
             </div>
           </dl>
         </div>
 
-        <div className="dialogue-board" aria-label="Dialogue transcript">
+        <div className="dialogue-board" aria-label="对话记录">
           <div className="panel-heading">
             <Volume2 size={18} aria-hidden="true" />
-            <span>Dialogue stream</span>
+            <span>对话流</span>
           </div>
 
           <ol className="transcript-list">
@@ -1219,7 +1218,7 @@ export function AssistantWorkspace(): React.JSX.Element {
           <form
             className="text-composer"
             onSubmit={handleTextMessageSubmit}
-            aria-label="Send a text message"
+            aria-label="发送文字消息"
           >
             <input
               type="text"
@@ -1227,26 +1226,26 @@ export function AssistantWorkspace(): React.JSX.Element {
               onChange={handleTextDraftChange}
               placeholder={
                 hasRealtimeConnection
-                  ? "Type a message to the assistant"
-                  : "Start a session to send text"
+                  ? "输入要发送给助手的消息"
+                  : "启动会话后可发送文字"
               }
               disabled={!hasRealtimeConnection}
-              aria-label="Text message to the assistant"
+              aria-label="发给助手的文字消息"
             />
             <button
               type="submit"
               disabled={!hasRealtimeConnection || textDraft.trim().length === 0}
-              aria-label="Send text message"
+              aria-label="发送文字消息"
             >
               <Send size={16} aria-hidden="true" />
-              <span>Send</span>
+              <span>发送</span>
             </button>
           </form>
         </div>
 
-        <aside className="security-strip" aria-label="Key protection">
+        <aside className="security-strip" aria-label="密钥保护">
           <ShieldCheck size={18} aria-hidden="true" />
-          <span>Permanent model keys stay out of the browser.</span>
+          <span>长期模型密钥不会进入浏览器。</span>
         </aside>
 
         <canvas ref={canvasRef} className="capture-canvas" aria-hidden="true" />
