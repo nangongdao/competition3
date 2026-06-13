@@ -68,10 +68,37 @@ corepack pnpm install
 corepack pnpm dev
 ```
 
+## Final Demo Verification
+
+Use the packaged demo readiness check before a final local demo or PR handoff:
+
+```powershell
+.\scripts\verify-demo.ps1 -RunInstall
+```
+
+For a fast smoke check that does not run lint, tests, or build:
+
+```powershell
+.\scripts\verify-demo.ps1 -SkipQuality -SkipBuild
+```
+
+When a Worker is already running, verify its health and provider config without
+printing secrets:
+
+```powershell
+.\scripts\verify-demo.ps1 `
+  -SkipQuality `
+  -SkipBuild `
+  -RequireProviderConfig `
+  -WorkerUrl "http://localhost:8787"
+```
+
+See [`docs/demo-verification.md`](docs/demo-verification.md) for the full
+no-key, Chat Completions, Realtime, hardware, and cost-evidence checklist.
+
 ## Worker Development
 
 Build the frontend and start the Worker for end-to-end API and Realtime testing:
-
 ```bash
 corepack pnpm dev:worker
 ```

@@ -582,3 +582,36 @@ Added a browser Web Speech adapter for Chat Completions mode, documented the new
 ### Next Steps
 
 - None - task complete
+
+## Session 18: Final demo verification package
+
+**Date**: 2026-06-13
+**Task**: Final demo verification package
+**Branch**: `docs/final-demo-packaging`
+
+### Summary
+
+Added final demo readiness script and verification checklist, linked README/design/roadmap, and documented the script contract in shared PR workflow spec.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `33acdf7` | (see git log) |
+| `fb9cc70` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
