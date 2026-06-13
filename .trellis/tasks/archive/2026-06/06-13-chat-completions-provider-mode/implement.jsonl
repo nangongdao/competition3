@@ -1,0 +1,7 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only ? no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend route and environment contracts"}
+{"file": ".trellis/spec/backend/api-module.md", "reason": "API module layout and Zod contract pattern"}
+{"file": ".trellis/spec/backend/api-patterns.md", "reason": "Backend API behavior and error mapping"}
+{"file": ".trellis/spec/backend/environment.md", "reason": "Worker runtime configuration and secret handling"}
+{"file": ".trellis/spec/frontend/hooks.md", "reason": "Frontend API hook conventions"}
+{"file": ".trellis/spec/shared/typescript.md", "reason": "TypeScript coding rules"}

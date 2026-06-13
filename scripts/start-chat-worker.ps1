@@ -1,13 +1,10 @@
 param(
   [string]$ApiKey = "",
   [string]$BaseUrl = "https://api.openai.com/v1",
-  [string]$RealtimeBaseUrl = "",
-  [string]$SessionPath = "/realtime/sessions",
-  [string]$WebrtcPath = "/realtime",
-  [string]$SessionUrl = "",
-  [string]$WebrtcUrl = "",
-  [string]$Model = "gpt-realtime",
-  [string]$Voice = "alloy",
+  [string]$ChatBaseUrl = "",
+  [string]$ChatCompletionsPath = "/chat/completions",
+  [string]$ChatCompletionsUrl = "",
+  [string]$ChatModel = "",
   [string]$Environment = "development",
   [switch]$NoStart
 )
@@ -51,18 +48,23 @@ if ([string]::IsNullOrWhiteSpace($ApiKey)) {
   throw "OPENAI_API_KEY is required."
 }
 
+if ([string]::IsNullOrWhiteSpace($ChatModel)) {
+  $ChatModel = Read-Host "Enter OPENAI_CHAT_MODEL"
+}
+
+if ([string]::IsNullOrWhiteSpace($ChatModel)) {
+  throw "OPENAI_CHAT_MODEL is required for Chat Completions mode."
+}
+
 $lines = [System.Collections.Generic.List[string]]::new()
 Add-EnvLine $lines "OPENAI_API_KEY" $ApiKey
 Add-EnvLine $lines "ENVIRONMENT" $Environment
-Add-EnvLine $lines "OPENAI_PROVIDER_MODE" "realtime"
+Add-EnvLine $lines "OPENAI_PROVIDER_MODE" "chat"
 Add-EnvLine $lines "OPENAI_BASE_URL" $BaseUrl
-Add-EnvLine $lines "OPENAI_REALTIME_BASE_URL" $RealtimeBaseUrl
-Add-EnvLine $lines "OPENAI_REALTIME_SESSION_PATH" $SessionPath
-Add-EnvLine $lines "OPENAI_REALTIME_WEBRTC_PATH" $WebrtcPath
-Add-EnvLine $lines "OPENAI_REALTIME_SESSION_URL" $SessionUrl
-Add-EnvLine $lines "OPENAI_REALTIME_WEBRTC_URL" $WebrtcUrl
-Add-EnvLine $lines "OPENAI_REALTIME_MODEL" $Model
-Add-EnvLine $lines "OPENAI_REALTIME_VOICE" $Voice
+Add-EnvLine $lines "OPENAI_CHAT_BASE_URL" $ChatBaseUrl
+Add-EnvLine $lines "OPENAI_CHAT_COMPLETIONS_PATH" $ChatCompletionsPath
+Add-EnvLine $lines "OPENAI_CHAT_COMPLETIONS_URL" $ChatCompletionsUrl
+Add-EnvLine $lines "OPENAI_CHAT_MODEL" $ChatModel
 
 $devVarsPath = Join-Path (Get-Location) ".dev.vars"
 [System.IO.File]::WriteAllLines($devVarsPath, $lines, [System.Text.UTF8Encoding]::new($false))
