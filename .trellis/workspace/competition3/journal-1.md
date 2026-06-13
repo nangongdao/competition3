@@ -513,3 +513,37 @@ Added configurable Realtime provider endpoints, Worker-provided WebRTC URL contr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: Add Chat Completions provider mode
+
+**Date**: 2026-06-13
+**Task**: Add Chat Completions provider mode
+**Branch**: `feat/chat-completions-provider-mode`
+
+### Summary
+
+Added a third-party-friendly Chat Completions provider mode with Worker-side chat completion routing, provider mode config, frontend mode switching, startup scripts, documentation, tests, and PR #14.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3c9a163` | (see git log) |
+| `e8a7360` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
