@@ -39,6 +39,7 @@ server side.
 | Send sampled frames into model context | Implemented | Manual and interval samples are sent as `conversation.item.create` data-channel events. |
 | Type a text message during a session | Implemented | A composer in the dialogue board sends text-only conversation items over the data channel and requests a response. |
 | See real token usage and estimated cost per session | Implemented | The usage meter parses authoritative `response.done` usage events into modality buckets with a USD estimate. |
+| Cap response length and request text-only responses | Implemented | The session uses brief, standard, or detailed response budgets, and the workspace can request text-only `response.create` events to avoid assistant audio output. |
 | Stop paying for consumed camera frames on later turns | Implemented | Consumed frame items are deleted from the server-side conversation after each response, with a visible pruned counter and an opt-out toggle. |
 | Skip static interval frames | Implemented | Automatic sampling compares downscaled grayscale frame signatures and skips low-change uploads; manual frame actions bypass the gate. |
 | Package final contest demo | Planned | Final pass should include verification notes and PR descriptions. |
@@ -105,8 +106,13 @@ image in 5, text in 4, text out 16, cached in 0.4):
 * **Microphone mute (implemented)**: an independent toggle sets
   `MediaStreamTrack.enabled = false` in both turn modes. In push-to-talk mode,
   mute also prevents the hold control from arming audio.
-* **Response budget (planned)**: `max_response_output_tokens` presets and an
-  optional text-only response mode (audio out is 4x text out).
+* **Response budgets (implemented)**: session creation accepts
+  `responseBudget: "brief" | "standard" | "detailed"`, and the Worker maps
+  those presets to `max_response_output_tokens` values of 300 / 800 / 1600.
+  Brief mode appends a concise-answer instruction. The workspace shows the
+  active budget and token cap, and a live text-only toggle changes
+  `response.create` to `modalities: ["text"]` so assistant responses can avoid
+  audio output when the user wants the cheapest output path.
 * **Idle auto-disconnect (planned)**: close the session after a period with
   no speech activity, instead of relying only on the fixed cap.
 

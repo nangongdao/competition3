@@ -620,6 +620,7 @@ When the session changes (login/logout), invalidate all user-scoped caches:
 type StartRealtimeSessionInput = {
   visualContextMode: "manual" | "interval";
   turnDetectionMode: "server-vad" | "push-to-talk";
+  responseBudget: "brief" | "standard" | "detailed";
   instructions?: string;
 };
 ```
@@ -642,11 +643,18 @@ type SendVisualContextInput = {
 - A successful Worker response must include a session object with
   `client_secret.value` and may include `model`; if `model` is absent, the
   browser falls back to the project Realtime default.
+- A successful Worker response must include a cost policy with
+  `responseBudget` and `maxResponseOutputTokens`; the browser validates this
+  before continuing with the WebRTC SDP exchange.
 - The browser sends microphone audio over the `RTCPeerConnection`.
 - `turnDetectionMode: "push-to-talk"` disables server VAD in the Worker-created
   session and the browser must keep the local audio track disabled while idle.
 - Push-to-talk release sends `input_audio_buffer.commit` followed by
   `response.create` on the Realtime data channel.
+- `responseMode: "audio-text"` sends `response.create` with
+  `modalities: ["audio", "text"]`; `responseMode: "text-only"` sends
+  `modalities: ["text"]`. This response mode must apply consistently to text
+  messages, visual frame questions, and push-to-talk releases.
 - Microphone mute uses `MediaStreamTrack.enabled = false` and must not require
   WebRTC renegotiation.
 - The browser receives assistant audio from `peerConnection.ontrack` and binds
@@ -667,6 +675,7 @@ type SendVisualContextInput = {
 | Browser lacks `RTCPeerConnection` | Do not call the session endpoint; show an unsupported-browser error. |
 | Worker returns 503 `missing_openai_api_key` | Surface the configuration error; keep media UI runnable. |
 | Worker response lacks `session.client_secret.value` | Close partial peer connection and show a contract error. |
+| Worker response lacks response budget policy fields | Close partial peer connection and show a contract error. |
 | SDP exchange fails | Close partial peer connection and show the upstream error text/status. |
 | Data channel is not open | Do not send frames; return `false` from the send function. |
 | Push-to-talk is muted or not active | Keep the audio track disabled and do not commit an audio buffer. |
@@ -681,6 +690,9 @@ type SendVisualContextInput = {
   still work, while session start reports a 503 configuration error.
 - Bad: browser code calls OpenAI session creation with a permanent key or tries
   to stream every video frame continuously.
+- Bad: text-only mode is implemented by muting local playback while still
+  sending `modalities: ["audio", "text"]`; that hides sound but does not reduce
+  output-audio tokens.
 
 ### 6. Tests Required
 
@@ -688,6 +700,10 @@ type SendVisualContextInput = {
   400, upstream failure maps to 502, and success returns the cost policy.
 - Worker route tests must cover default server VAD and push-to-talk
   `turn_detection: null` payload mapping.
+- Worker route tests must cover response budget defaults and
+  `max_response_output_tokens` payload mapping.
+- Unit tests should cover response-create event construction for audio+text and
+  text-only modalities.
 - Typecheck must verify the hook consumes backend response types through
   type-only imports.
 - Browser smoke/manual tests must cover camera/microphone permission prompts,

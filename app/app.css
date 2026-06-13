@@ -317,6 +317,16 @@ h1 {
   padding-top: 4px;
 }
 
+.response-controls {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.response-controls .mode-segment > div {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .mode-segment {
   display: grid;
   gap: 8px;
@@ -888,6 +898,7 @@ h1 {
   .control-grid,
   .cost-panel dl div,
   .mode-segment > div,
+  .response-controls .mode-segment > div,
   .visual-context-panel,
   .frame-stats {
     grid-template-columns: 1fr;

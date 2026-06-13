@@ -52,7 +52,8 @@ useless input, then cap output, then write down the measured results.**
 | #3 | `feat/realtime-usage-cost-meter` | Usage meter: parses `response.done` usage into modality buckets, USD estimate, last-turn input (snowball indicator); 12 unit tests | open, stacked on #2 |
 | #4 | `feat/history-frame-pruning` | History frame pruning: consumed frame items deleted via `conversation.item.delete` (pending -> in-flight -> consumed tracker, `evt_prune_` tagged deletes, silenced races); toggle + pruned counter; 10 unit tests | open, stacked on #3 |
 | #6 | `feat/frame-difference-sampling` | Frame-difference sampling: downscaled luma diff skips low-change interval uploads, manual frame actions bypass the gate, sent/skipped counters show savings; 8 unit tests | open, stacked on #5 |
-| pending | `feat/push-to-talk-microphone-mute` | Push-to-talk and microphone mute: session-level turn detection mode, PTT audio buffer commit, live `MediaStreamTrack.enabled` mute, Worker payload mapping tests | in progress |
+| #7 | `feat/push-to-talk-microphone-mute` | Push-to-talk and microphone mute: session-level turn detection mode, PTT audio buffer commit, live `MediaStreamTrack.enabled` mute, Worker payload mapping tests | open, stacked on #6 |
+| pending | `feat/response-budgets` | Response budgets: Worker-enforced output token caps, brief-mode instruction, text-only `response.create` mode, cost-panel policy display, Worker/client tests | in progress |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission
@@ -117,7 +118,7 @@ future session can implement it without re-deriving the design.
   events arrive while muted/not holding; usage meter audio-input bucket
   stays flat during background noise in push-to-talk mode.
 
-### 3.3 Response budgets (planned)
+### 3.3 Response budgets (in progress)
 
 *Cost lever: audio output is the most expensive bucket; cap it.*
 
@@ -128,6 +129,13 @@ future session can implement it without re-deriving the design.
   * Optional per-turn text-only mode: workspace checkbox switches the
     `response.create` payload to `modalities: ["text"]` (16 vs 64 per 1M).
   * Show the active budget in the cost-controls panel.
+* **Current implementation**: the Worker validates the budget enum, sends
+  `max_response_output_tokens` values of 300 / 800 / 1600, appends a brief
+  answer instruction for the brief preset, and returns the active budget plus
+  token cap in `costPolicy`. The workspace exposes a locked-per-session budget
+  selector and a live text-only response toggle that changes all
+  `response.create` calls, including text messages, frame questions, and
+  push-to-talk releases.
 * **Verification**: worker test for payload mapping; usage meter
   output-audio bucket drops in text-only mode; transcript still renders
   text responses.
