@@ -9,7 +9,7 @@ Allow the project to connect to third-party API providers that implement an Open
 * The current Worker creates Realtime sessions with `OPENAI_API_KEY`.
 * The current Worker hardcodes `https://api.openai.com/v1/realtime/sessions`.
 * The current browser hook hardcodes `https://api.openai.com/v1/realtime` for the WebRTC SDP exchange.
-* The user wants third-party API站接入, clear startup commands, parameter definitions, and model requirements.
+* The user wants third-party API???, clear startup commands, parameter definitions, and model requirements.
 * The user offered either a startup script or a post-start settings UI. For security, API keys should stay in Worker environment variables instead of browser UI/localStorage.
 
 ## Requirements
