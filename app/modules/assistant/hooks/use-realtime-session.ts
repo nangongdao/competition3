@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  accumulateUsage,
+  createEmptyUsageReport,
+  estimateCostUsd,
+  parseResponseUsage,
+  type UsageReport,
+} from "@/modules/assistant/lib/cost-model";
 import type {
   AssistantPhase,
   RealtimeConnectionStatus,
@@ -43,6 +50,7 @@ type UseRealtimeSessionOptions = {
 type UseRealtimeSessionResult = {
   realtimeState: RealtimeSessionState;
   remoteStream: MediaStream | null;
+  usageReport: UsageReport;
   startSession: (input: StartRealtimeSessionInput) => Promise<boolean>;
   stopSession: () => void;
   sendVisualContext: (input: SendVisualContextInput) => boolean;
@@ -328,6 +336,9 @@ export function useRealtimeSession({
   const [realtimeState, setRealtimeState] =
     useState<RealtimeSessionState>(initialRealtimeState);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [usageReport, setUsageReport] = useState<UsageReport>(
+    createEmptyUsageReport,
+  );
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
@@ -384,6 +395,28 @@ export function useRealtimeSession({
       }));
     },
     [clearSessionTimer],
+  );
+
+  const recordTurnUsage = useCallback(
+    (event: Record<string, unknown>): void => {
+      const turnUsage = parseResponseUsage(event);
+
+      if (turnUsage === null) {
+        return;
+      }
+
+      setUsageReport((current) => {
+        const totals = accumulateUsage(current.totals, turnUsage);
+
+        return {
+          turnCount: current.turnCount + 1,
+          totals,
+          lastTurn: turnUsage,
+          estimatedCostUsd: estimateCostUsd(totals),
+        };
+      });
+    },
+    [],
   );
 
   const handleServerEvent = useCallback(
@@ -451,11 +484,12 @@ export function useRealtimeSession({
       }
 
       if (eventType === "response.done") {
+        recordTurnUsage(event);
         flushAssistantText(null);
         onPhaseChange("listening");
       }
     },
-    [flushAssistantText, onPhaseChange, onTranscript],
+    [flushAssistantText, onPhaseChange, onTranscript, recordTurnUsage],
   );
 
   const scheduleSessionLimit = useCallback(
@@ -514,6 +548,7 @@ export function useRealtimeSession({
       }
 
       closeConnection("idle");
+      setUsageReport(createEmptyUsageReport());
       setRealtimeState({
         status: "creating-session",
         costPolicy: null,
@@ -726,6 +761,7 @@ export function useRealtimeSession({
   return {
     realtimeState,
     remoteStream,
+    usageReport,
     startSession,
     stopSession,
     sendVisualContext,
