@@ -106,3 +106,36 @@ Captured Git pull semantics, repository sync checks, push failure diagnosis, gh 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Text message composer for realtime dialogue
+
+**Date**: 2026-06-13
+**Task**: Text message composer for realtime dialogue
+**Branch**: `feat/text-input-dialogue`
+
+### Summary
+
+Added a text composer to the dialogue board: sendTextMessage in useRealtimeSession sends text-only conversation items plus response.create over the data channel; composer disabled without a connection; lint/typecheck/build/tests passed; PR #2 opened.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `da6c0b6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
