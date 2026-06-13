@@ -14,8 +14,8 @@ server side.
 * Frontend: Vite, React, TypeScript, Tailwind CSS v4.
 * Backend: Cloudflare Worker with Hono routes.
 * Media: browser `getUserMedia` for camera and microphone permissions.
-* AI session boundary: Worker endpoint creates short-lived OpenAI Realtime
-  sessions using `OPENAI_API_KEY`.
+* AI session boundary: Worker endpoint creates short-lived OpenAI-compatible
+  Realtime sessions using `OPENAI_API_KEY` and configurable provider URLs.
 * Visual context: browser samples selected camera frames instead of streaming
   raw video continuously.
 * Realtime transport: browser WebRTC peer connection sends microphone audio,
@@ -32,7 +32,7 @@ server side.
 | Start and stop an assistant session | Implemented | The browser creates a Worker-backed Realtime session and closes the peer connection on stop. |
 | See listening, thinking, responding, connected, and error states | Implemented | State ring, media status, transcript, and error banner cover these states. |
 | Sample visual context frames | Implemented | Manual sampling and low-frequency interval controls capture JPEG frames to canvas. |
-| Create a key-safe AI session | Implemented | `POST /api/realtime/session` creates a server-side Realtime session when `OPENAI_API_KEY` is configured. |
+| Create a key-safe AI session | Implemented | `POST /api/realtime/session` creates a server-side Realtime session when `OPENAI_API_KEY` is configured. Provider URLs can target OpenAI or a third-party Realtime-compatible API. |
 | Stream low-latency voice to the model | Implemented | The browser posts an SDP offer with the short-lived client secret and plays the remote audio stream. |
 | Avoid noisy-room voice false positives | Implemented | The session can run in push-to-talk mode, which disables server VAD and commits audio only after the user releases the hold control. |
 | Mute the microphone during a live session | Implemented | The workspace toggles the local audio track with `MediaStreamTrack.enabled` without renegotiating WebRTC. |
@@ -77,6 +77,10 @@ image in 5, text in 4, text out 16, cached in 0.4):
   connection when that cap is reached.
 * **Key safety (implemented)**: permanent OpenAI API keys stay in Worker
   environment variables.
+* **Provider configuration (implemented)**: the Worker accepts
+  OpenAI-compatible Realtime base URL/path overrides and returns the browser
+  SDP endpoint as `webrtcUrl`, so permanent keys and provider routing stay
+  server-side.
 * **Compact default instructions (implemented)**: the Worker sends a short
   default Realtime instruction block.
 * **Local fallback (implemented)**: without `OPENAI_API_KEY`, the media

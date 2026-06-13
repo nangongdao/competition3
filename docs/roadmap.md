@@ -57,6 +57,7 @@ useless input, then cap output, then write down the measured results.**
 | pending | `feat/idle-auto-disconnect` | Idle auto-disconnect: activity-based warning and disconnect timers, transcript notices, cost-panel policy display, client helper tests | in progress |
 | pending | `docs/design-measurement-backfill` | Measurement backfill support: usage-meter JSON/CSV export, repeatable measurement protocol, pending evidence table scaffold | in progress |
 | pending | `feat/chinese-interface-localization` | Chinese default interface localization: primary workspace labels, controls, transcript notices, accessibility labels, and Realtime client error messages | in progress |
+| pending | `feat/third-party-realtime-provider` | Third-party Realtime provider configuration: Worker-side base URL/path/full URL overrides, browser uses returned `webrtcUrl`, README startup commands, and local PowerShell startup helper | in progress |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission

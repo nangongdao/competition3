@@ -613,7 +613,7 @@ When the session changes (login/logout), invalidate all user-scoped caches:
 - Hook location: `app/modules/{feature}/hooks/use-realtime-session.ts`
 - Session API: `POST /api/realtime/session`
 - WebRTC SDP exchange:
-  `POST https://api.openai.com/v1/realtime?model=<session.model>`
+  `POST <sessionResponse.webrtcUrl>`
 - Hook start input:
 
 ```typescript
@@ -643,9 +643,17 @@ type SendVisualContextInput = {
 - A successful Worker response must include a session object with
   `client_secret.value` and may include `model`; if `model` is absent, the
   browser falls back to the project Realtime default.
+- A successful Worker response must include `webrtcUrl`; browser code must use
+  that URL for the WebRTC SDP exchange instead of hardcoding an OpenAI URL.
 - A successful Worker response must include a cost policy with
   `responseBudget` and `maxResponseOutputTokens`; the browser validates this
   before continuing with the WebRTC SDP exchange.
+- Worker-side Realtime provider configuration lives in runtime bindings only:
+  `OPENAI_BASE_URL`, `OPENAI_REALTIME_BASE_URL`,
+  `OPENAI_REALTIME_SESSION_PATH`, `OPENAI_REALTIME_WEBRTC_PATH`,
+  `OPENAI_REALTIME_SESSION_URL`, `OPENAI_REALTIME_WEBRTC_URL`,
+  `OPENAI_REALTIME_MODEL`, and `OPENAI_REALTIME_VOICE`. Do not mirror these as
+  frontend secrets.
 - The browser sends microphone audio over the `RTCPeerConnection`.
 - `turnDetectionMode: "push-to-talk"` disables server VAD in the Worker-created
   session and the browser must keep the local audio track disabled while idle.
@@ -690,6 +698,7 @@ type SendVisualContextInput = {
 | Browser lacks `RTCPeerConnection` | Do not call the session endpoint; show an unsupported-browser error. |
 | Worker returns 503 `missing_openai_api_key` | Surface the configuration error; keep media UI runnable. |
 | Worker response lacks `session.client_secret.value` | Close partial peer connection and show a contract error. |
+| Worker response lacks `webrtcUrl` | Close partial peer connection and show a contract error. |
 | Worker response lacks response budget policy fields | Close partial peer connection and show a contract error. |
 | SDP exchange fails | Close partial peer connection and show the upstream error text/status. |
 | Data channel is not open | Do not send frames; return `false` from the send function. |
@@ -718,7 +727,10 @@ type SendVisualContextInput = {
 ### 6. Tests Required
 
 - Worker route tests must assert missing key maps to 503, invalid body maps to
-  400, upstream failure maps to 502, and success returns the cost policy.
+  400, invalid provider URL configuration maps to 503, upstream failure maps to
+  502, and success returns the cost policy plus `webrtcUrl`.
+- Worker route tests must cover default OpenAI URL construction, third-party
+  base URL construction, and full session/WebRTC URL overrides.
 - Worker route tests must cover default server VAD and push-to-talk
   `turn_detection: null` payload mapping.
 - Worker route tests must cover response budget defaults and

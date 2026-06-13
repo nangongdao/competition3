@@ -129,6 +129,28 @@ describe("realtime session route", () => {
     expect(body.code).toBe("invalid_request");
   });
 
+  it("returns 503 for invalid realtime provider configuration", async () => {
+    const response = await app.request(
+      "/api/realtime/session",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ visualContextMode: "manual" }),
+      },
+      createEnv({
+        OPENAI_API_KEY: "sk-test",
+        OPENAI_REALTIME_BASE_URL: "not-a-url",
+      }),
+    );
+    const body = await readJson<ApiErrorResponse>(response);
+
+    expect(response.status).toBe(503);
+    expect(body.success).toBe(false);
+    expect(body.code).toBe("invalid_realtime_provider_config");
+  });
+
   it("maps upstream OpenAI failures to 502", async () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -217,6 +239,9 @@ describe("realtime session route", () => {
     expect(body.costPolicy.maxResponseOutputTokens).toBe(800);
     expect(body.costPolicy.maxSessionSeconds).toBe(600);
     expect(body.costPolicy.frameUpload).toBe("manual-or-interval");
+    expect(body.webrtcUrl).toBe(
+      "https://api.openai.com/v1/realtime?model=gpt-realtime",
+    );
 
     const firstCall = fetchMock.mock.calls[0];
     if (firstCall === undefined) {
@@ -228,6 +253,126 @@ describe("realtime session route", () => {
     const upstreamBody = readMockRequestJson(firstCall[1]);
     expect(upstreamBody.turn_detection).toBeUndefined();
     expect(upstreamBody.max_response_output_tokens).toBe(800);
+  });
+
+  it("uses a third-party realtime base URL for session and WebRTC endpoints", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        void input;
+        void init;
+
+        return new Response(
+          JSON.stringify({
+            id: "sess_test",
+            model: "vendor-realtime-model",
+            client_secret: {
+              value: "vendor_ephemeral_key",
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/realtime/session",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ visualContextMode: "manual" }),
+      },
+      createEnv({
+        OPENAI_API_KEY: "vendor-key",
+        OPENAI_BASE_URL: "https://third-party.example/v1",
+        OPENAI_REALTIME_MODEL: "configured-model",
+        OPENAI_REALTIME_VOICE: "configured-voice",
+      }),
+    );
+    const body = await readJson<RealtimeSessionSuccessResponse>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.webrtcUrl).toBe(
+      "https://third-party.example/v1/realtime?model=vendor-realtime-model",
+    );
+
+    const firstCall = fetchMock.mock.calls[0];
+    if (firstCall === undefined) {
+      throw new Error("Expected upstream fetch to be called.");
+    }
+
+    expect(String(firstCall[0])).toBe(
+      "https://third-party.example/v1/realtime/sessions",
+    );
+
+    const upstreamBody = readMockRequestJson(firstCall[1]);
+    expect(upstreamBody.model).toBe("configured-model");
+    expect(upstreamBody.voice).toBe("configured-voice");
+  });
+
+  it("allows full realtime endpoint URL overrides", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        void input;
+        void init;
+
+        return new Response(
+          JSON.stringify({
+            id: "sess_test",
+            client_secret: {
+              value: "vendor_ephemeral_key",
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/realtime/session",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ visualContextMode: "manual" }),
+      },
+      createEnv({
+        OPENAI_API_KEY: "vendor-key",
+        OPENAI_REALTIME_SESSION_URL:
+          "https://third-party.example/custom/session",
+        OPENAI_REALTIME_WEBRTC_URL: "https://rtc.third-party.example/connect",
+        OPENAI_REALTIME_MODEL: "configured-model",
+      }),
+    );
+    const body = await readJson<RealtimeSessionSuccessResponse>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.webrtcUrl).toBe(
+      "https://rtc.third-party.example/connect?model=configured-model",
+    );
+
+    const firstCall = fetchMock.mock.calls[0];
+    if (firstCall === undefined) {
+      throw new Error("Expected upstream fetch to be called.");
+    }
+
+    expect(String(firstCall[0])).toBe(
+      "https://third-party.example/custom/session",
+    );
   });
 
   it("maps brief budget to a short output cap and brevity instruction", async () => {

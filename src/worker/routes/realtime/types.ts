@@ -34,6 +34,7 @@ export type RealtimeCostPolicy = {
 export type RealtimeSessionSuccessResponse = {
   success: true;
   session: unknown;
+  webrtcUrl: string;
   costPolicy: RealtimeCostPolicy;
 };
 

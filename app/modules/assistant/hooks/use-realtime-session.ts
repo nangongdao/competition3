@@ -33,8 +33,6 @@ import type {
   RealtimeTurnDetectionMode,
 } from "../../../../src/worker/routes/realtime/types";
 
-const REALTIME_WEBRTC_URL = "https://api.openai.com/v1/realtime";
-const DEFAULT_REALTIME_MODEL = "gpt-realtime";
 const DEFAULT_TURN_DETECTION_MODE: RealtimeTurnDetectionMode = "server-vad";
 const DATA_CHANNEL_LABEL = "oai-events";
 const DATA_CHANNEL_OPEN_TIMEOUT_MS = 15_000;
@@ -185,14 +183,6 @@ function getSessionClientSecret(session: unknown): string | null {
   return null;
 }
 
-function getSessionModel(session: unknown): string {
-  if (!isRecord(session)) {
-    return DEFAULT_REALTIME_MODEL;
-  }
-
-  return getStringField(session, "model") ?? DEFAULT_REALTIME_MODEL;
-}
-
 function isRealtimeCostPolicy(value: unknown): value is RealtimeCostPolicy {
   return (
     isRecord(value) &&
@@ -216,6 +206,8 @@ function isRealtimeSessionSuccessResponse(
     isRecord(value) &&
     value.success === true &&
     "session" in value &&
+    typeof value.webrtcUrl === "string" &&
+    value.webrtcUrl.trim().length > 0 &&
     isRealtimeCostPolicy(value.costPolicy)
   );
 }
@@ -846,7 +838,6 @@ export function useRealtimeSession({
           throw new Error("Realtime 会话没有返回临时客户端密钥。");
         }
 
-        const model = getSessionModel(sessionResponse.session);
         const peerConnection = new RTCPeerConnection();
         const fallbackRemoteStream = new MediaStream();
         peerConnectionRef.current = peerConnection;
@@ -913,17 +904,14 @@ export function useRealtimeSession({
           peerConnectionState: peerConnection.connectionState,
         });
 
-        const sdpResponse = await fetch(
-          `${REALTIME_WEBRTC_URL}?model=${encodeURIComponent(model)}`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${clientSecret}`,
-              "Content-Type": "application/sdp",
-            },
-            body: peerConnection.localDescription.sdp,
+        const sdpResponse = await fetch(sessionResponse.webrtcUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${clientSecret}`,
+            "Content-Type": "application/sdp",
           },
-        );
+          body: peerConnection.localDescription.sdp,
+        });
 
         if (!sdpResponse.ok) {
           throw new Error(await readSdpError(sdpResponse));
