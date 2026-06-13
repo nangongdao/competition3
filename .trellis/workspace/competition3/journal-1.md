@@ -403,3 +403,37 @@ Implemented activity-based Realtime idle warning and auto-disconnect, updated ro
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: Usage report export and measurement protocol
+
+**Date**: 2026-06-13
+**Task**: Usage report export and measurement protocol
+**Branch**: `docs/design-measurement-backfill`
+
+### Summary
+
+Added Realtime usage JSON/CSV export, per-turn usage report tracking, measurement protocol docs, and Trellis spec guidance for evidence-backed cost measurements.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a0bc4b1` | (see git log) |
+| `d03b0f4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
