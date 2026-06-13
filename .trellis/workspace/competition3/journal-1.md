@@ -271,3 +271,36 @@ Implemented frame-difference gating for automatic visual context sampling, updat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: Push-to-talk microphone controls
+
+**Date**: 2026-06-13
+**Task**: Push-to-talk microphone controls
+**Branch**: `feat/push-to-talk-microphone-mute`
+
+### Summary
+
+Implemented roadmap 3.2 push-to-talk and microphone mute: Worker turnDetectionMode contract, push-to-talk audio buffer commit flow, live mic mute UI, tests, docs, and PR #7. Normal git push failed, so the remote branch was updated via GitHub Git Data API fallback with remote commit 27bfa80.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f618a5c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
