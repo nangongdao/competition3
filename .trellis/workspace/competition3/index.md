@@ -29,7 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
-| 13 | 2026-06-13 | Usage report export and measurement protocol | `a0bc4b1`, `d03b0f4` | `docs/design-measurement-backfill` |
+| 13 | 2026-06-13 | Usage report export and measurement protocol | `12567ef`, `1cf0635` | `docs/design-measurement-backfill` |
 | 12 | 2026-06-13 | Idle auto-disconnect | `7196e1f` | `feat/idle-auto-disconnect` |
 | 11 | 2026-06-13 | Response budgets | `ddf9ac4` | `feat/response-budgets` |
 | 10 | 2026-06-13 | Document GitHub API push fallback | `ce55de7` | `docs/github-api-push-fallback-guidance` |

@@ -417,18 +417,25 @@ Added Realtime usage JSON/CSV export, per-turn usage report tracking, measuremen
 
 ### Main Changes
 
-(Add details)
+- Added browser-local JSON and CSV downloads for the Realtime usage meter.
+- Extended usage accounting with timestamped per-turn rows and cumulative estimated cost.
+- Documented the measurement protocol and pending live-run evidence table.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `a0bc4b1` | (see git log) |
-| `d03b0f4` | (see git log) |
+| `12567ef` | feat: add usage report export |
+| `1cf0635` | chore(task): add 06-13-design-measurement-backfill |
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] git diff --check
+- [OK] corepack pnpm lint
+- [OK] corepack pnpm typecheck
+- [OK] corepack pnpm build
+- [OK] corepack pnpm test
+- [OK] Local Vite smoke returned HTTP 200 at http://127.0.0.1:5173/
 
 ### Status
 
@@ -436,4 +443,4 @@ Added Realtime usage JSON/CSV export, per-turn usage report tracking, measuremen
 
 ### Next Steps
 
-- None - task complete
+- Run live A/B measurement sessions from an environment with `OPENAI_API_KEY` and fill the pending results table.
