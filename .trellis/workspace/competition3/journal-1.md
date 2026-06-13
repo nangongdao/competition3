@@ -304,3 +304,36 @@ Implemented roadmap 3.2 push-to-talk and microphone mute: Worker turnDetectionMo
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: Document GitHub API push fallback
+
+**Date**: 2026-06-13
+**Task**: Document GitHub API push fallback
+**Branch**: `docs/github-api-push-fallback-guidance`
+
+### Summary
+
+Captured the repository-specific Git HTTPS failure escalation path in pr-workflow.md: one normal push, one HTTP/1.1 retry, then small-blob Git Data API fallback using remote base SHA/tree, with Contents API for Trellis bookkeeping moves.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ce55de7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

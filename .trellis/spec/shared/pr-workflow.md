@@ -75,6 +75,55 @@ Use these rules:
 - If normal push remains unavailable but `gh api` works, use GitHub CLI to
   create/update the remote branch or create the PR, then verify the remote diff.
 
+### Fast Fallback for This Repository
+
+In this checkout, repeated Git HTTPS pushes have failed with connection resets
+and port 443 timeouts even when `gh auth status` is healthy. Do not spend a long
+session retrying the same transport path.
+
+Use this escalation order:
+
+1. Try normal push once:
+   `git push -u origin <branch>`.
+2. If it fails with reset/timeout, retry once with HTTP/1.1:
+   `git -c http.version=HTTP/1.1 push -u origin <branch>`.
+3. If HTTP/1.1 also fails and `gh api repos/nangongdao/competition3 --jq .name`
+   works, stop retrying Git transport and use the GitHub REST API fallback.
+
+Prefer the **small-blob Git Data API flow** for code/doc commits:
+
+1. Resolve the remote base commit and tree from GitHub, not from the local
+   equivalent commit:
+   ```bash
+   gh api repos/nangongdao/competition3/git/ref/heads/<base-branch> --jq .object.sha
+   gh api repos/nangongdao/competition3/git/commits/<remote-base-sha> --jq .tree.sha
+   ```
+2. For each changed file, create a blob with `POST /git/blobs` using base64
+   content. This keeps each request small and avoids the large-tree timeout seen
+   with one huge JSON payload.
+3. Create a tree with `POST /git/trees` using `base_tree: <remote-base-tree>`
+   and the blob SHA entries for changed files.
+4. Create a commit with `POST /git/commits` using parent
+   `<remote-base-sha>`.
+5. Create or update the branch ref with `POST /git/refs` or `PATCH
+   /git/refs/heads/<branch>`.
+
+For Trellis bookkeeping moves after `/finish-work` style cleanup, the Contents
+API may be simpler than hand-building tree deletions:
+
+- `PUT /contents/<path>` to create archived task files or update journal files.
+- `DELETE /contents/<path>` to remove the old active task files.
+
+Avoid these time sinks after the first failure:
+
+- Do not keep repeating `git push`; one normal attempt plus one HTTP/1.1 retry
+  is enough evidence for this repository.
+- Do not build one large `POST /git/trees` payload with full file contents; it
+  has timed out in this environment.
+- Do not use local parent SHAs when the base branch was previously created by
+  API fallback. Use the remote base SHA/tree from GitHub, otherwise the PR head
+  can diverge or the branch update may be rejected.
+
 The local Trellis workflow may mention `task.py create-pr`; this checkout does
 not currently provide that command. Use `gh pr create` instead:
 
