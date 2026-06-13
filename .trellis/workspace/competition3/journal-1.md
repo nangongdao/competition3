@@ -444,3 +444,38 @@ Added Realtime usage JSON/CSV export, per-turn usage report tracking, measuremen
 ### Next Steps
 
 - Run live A/B measurement sessions from an environment with `OPENAI_API_KEY` and fill the pending results table.
+
+
+## Session 14: Chinese Interface Localization
+
+**Date**: 2026-06-13
+**Task**: Chinese Interface Localization
+**Branch**: `feat/chinese-interface-localization`
+
+### Summary
+
+Localized the assistant workspace to Chinese by default, updated design and roadmap status, verified lint/typecheck/tests/build, opened stacked PR #12, and recorded task metadata.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9b5e57b` | (see git log) |
+| `1f47863` | (see git log) |
+| `436714e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
