@@ -28,11 +28,36 @@ export type UsageBuckets = {
   outputAudioTokens: number;
 };
 
+export type UsageTurn = {
+  index: number;
+  recordedAt: number;
+  usage: UsageBuckets;
+  estimatedCostUsd: number;
+  cumulativeEstimatedCostUsd: number;
+};
+
 export type UsageReport = {
   turnCount: number;
   totals: UsageBuckets;
   lastTurn: UsageBuckets | null;
   estimatedCostUsd: number;
+  turns: readonly UsageTurn[];
+};
+
+export type UsageReportExport = {
+  metadata: {
+    schemaVersion: 1;
+    generatedAt: number;
+    source: "openai-realtime-response-done";
+    pricesUsdPerMillion: typeof REALTIME_PRICES_USD_PER_MILLION;
+  };
+  summary: {
+    turnCount: number;
+    estimatedCostUsd: number;
+  };
+  totals: UsageBuckets;
+  lastTurn: UsageBuckets | null;
+  turns: readonly UsageTurn[];
 };
 
 /**
@@ -74,6 +99,7 @@ export function createEmptyUsageReport(): UsageReport {
     totals: createEmptyUsage(),
     lastTurn: null,
     estimatedCostUsd: 0,
+    turns: [],
   };
 }
 
@@ -152,6 +178,22 @@ export function accumulateUsage(
   };
 }
 
+function copyUsageBuckets(usage: UsageBuckets): UsageBuckets {
+  return {
+    inputTokens: usage.inputTokens,
+    inputTextTokens: usage.inputTextTokens,
+    inputAudioTokens: usage.inputAudioTokens,
+    inputImageTokens: usage.inputImageTokens,
+    cachedInputTokens: usage.cachedInputTokens,
+    cachedTextTokens: usage.cachedTextTokens,
+    cachedAudioTokens: usage.cachedAudioTokens,
+    cachedImageTokens: usage.cachedImageTokens,
+    outputTokens: usage.outputTokens,
+    outputTextTokens: usage.outputTextTokens,
+    outputAudioTokens: usage.outputAudioTokens,
+  };
+}
+
 function uncached(modalityTokens: number, cachedTokens: number): number {
   return Math.max(0, modalityTokens - cachedTokens);
 }
@@ -175,6 +217,164 @@ export function estimateCostUsd(usage: UsageBuckets): number {
     usage.outputAudioTokens * prices.outputAudio;
 
   return perMillion / 1_000_000;
+}
+
+export function appendUsageTurn(
+  report: UsageReport,
+  turnUsage: UsageBuckets,
+  recordedAt: number,
+): UsageReport {
+  const usage = copyUsageBuckets(turnUsage);
+  const totals = accumulateUsage(report.totals, usage);
+  const cumulativeEstimatedCostUsd = estimateCostUsd(totals);
+  const nextTurn: UsageTurn = {
+    index: report.turnCount + 1,
+    recordedAt,
+    usage,
+    estimatedCostUsd: estimateCostUsd(usage),
+    cumulativeEstimatedCostUsd,
+  };
+
+  return {
+    turnCount: nextTurn.index,
+    totals,
+    lastTurn: usage,
+    estimatedCostUsd: cumulativeEstimatedCostUsd,
+    turns: [...report.turns, nextTurn],
+  };
+}
+
+function copyUsageTurn(turn: UsageTurn): UsageTurn {
+  return {
+    index: turn.index,
+    recordedAt: turn.recordedAt,
+    usage: copyUsageBuckets(turn.usage),
+    estimatedCostUsd: turn.estimatedCostUsd,
+    cumulativeEstimatedCostUsd: turn.cumulativeEstimatedCostUsd,
+  };
+}
+
+export function buildUsageReportExport(
+  report: UsageReport,
+  generatedAt: number = Date.now(),
+): UsageReportExport {
+  return {
+    metadata: {
+      schemaVersion: 1,
+      generatedAt,
+      source: "openai-realtime-response-done",
+      pricesUsdPerMillion: REALTIME_PRICES_USD_PER_MILLION,
+    },
+    summary: {
+      turnCount: report.turnCount,
+      estimatedCostUsd: report.estimatedCostUsd,
+    },
+    totals: copyUsageBuckets(report.totals),
+    lastTurn:
+      report.lastTurn === null ? null : copyUsageBuckets(report.lastTurn),
+    turns: report.turns.map(copyUsageTurn),
+  };
+}
+
+export function serializeUsageReportJson(
+  report: UsageReport,
+  generatedAt: number = Date.now(),
+): string {
+  return `${JSON.stringify(buildUsageReportExport(report, generatedAt), null, 2)}\n`;
+}
+
+function csvCell(value: string | number | null): string {
+  if (value === null) {
+    return "";
+  }
+
+  const text = String(value);
+
+  if (!/[",\r\n]/.test(text)) {
+    return text;
+  }
+
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function usageCsvCells(usage: UsageBuckets): readonly number[] {
+  return [
+    usage.inputTokens,
+    usage.inputTextTokens,
+    usage.inputAudioTokens,
+    usage.inputImageTokens,
+    usage.cachedInputTokens,
+    usage.cachedTextTokens,
+    usage.cachedAudioTokens,
+    usage.cachedImageTokens,
+    usage.outputTokens,
+    usage.outputTextTokens,
+    usage.outputAudioTokens,
+  ];
+}
+
+function usageCsvRow(
+  rowType: "turn" | "totals",
+  turnIndex: number | null,
+  recordedAt: number,
+  usage: UsageBuckets,
+  estimatedCostUsd: number,
+  cumulativeEstimatedCostUsd: number,
+): string {
+  return [
+    rowType,
+    turnIndex,
+    recordedAt,
+    ...usageCsvCells(usage),
+    estimatedCostUsd,
+    cumulativeEstimatedCostUsd,
+  ]
+    .map(csvCell)
+    .join(",");
+}
+
+export function serializeUsageReportCsv(
+  report: UsageReport,
+  generatedAt: number = Date.now(),
+): string {
+  const header = [
+    "row_type",
+    "turn_index",
+    "recorded_at_ms",
+    "input_tokens",
+    "input_text_tokens",
+    "input_audio_tokens",
+    "input_image_tokens",
+    "cached_input_tokens",
+    "cached_text_tokens",
+    "cached_audio_tokens",
+    "cached_image_tokens",
+    "output_tokens",
+    "output_text_tokens",
+    "output_audio_tokens",
+    "estimated_cost_usd",
+    "cumulative_estimated_cost_usd",
+  ].join(",");
+  const turnRows = report.turns.map((turn) =>
+    usageCsvRow(
+      "turn",
+      turn.index,
+      turn.recordedAt,
+      turn.usage,
+      turn.estimatedCostUsd,
+      turn.cumulativeEstimatedCostUsd,
+    ),
+  );
+  const totalsRow = usageCsvRow(
+    "totals",
+    null,
+    generatedAt,
+    report.totals,
+    report.estimatedCostUsd,
+    report.estimatedCostUsd,
+  );
+
+  return [header, ...turnRows, totalsRow].join("\n") + "\n";
 }
 
 export function formatUsd(amount: number): string {

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  accumulateUsage,
+  appendUsageTurn,
   createEmptyUsageReport,
-  estimateCostUsd,
   parseResponseUsage,
   type UsageReport,
 } from "@/modules/assistant/lib/cost-model";
@@ -569,14 +568,7 @@ export function useRealtimeSession({
       }
 
       setUsageReport((current) => {
-        const totals = accumulateUsage(current.totals, turnUsage);
-
-        return {
-          turnCount: current.turnCount + 1,
-          totals,
-          lastTurn: turnUsage,
-          estimatedCostUsd: estimateCostUsd(totals),
-        };
+        return appendUsageTurn(current, turnUsage, Date.now());
       });
     },
     [],

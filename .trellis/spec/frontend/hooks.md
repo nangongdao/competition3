@@ -758,6 +758,112 @@ const sessionResponse = await fetch("/api/realtime/session", {
 // Use only the short-lived session.client_secret.value for WebRTC SDP.
 ```
 
+## Scenario: Realtime Usage Measurement Export
+
+### 1. Scope / Trigger
+
+- Trigger: changing the Realtime usage meter, cost-model helpers, or measurement
+  evidence workflow.
+- Goal: keep exported measurement evidence tied to authoritative
+  `response.done` usage instead of hand-entered UI totals.
+
+### 2. Signatures
+
+```typescript
+export type UsageTurn = {
+  index: number;
+  recordedAt: number;
+  usage: UsageBuckets;
+  estimatedCostUsd: number;
+  cumulativeEstimatedCostUsd: number;
+};
+
+export type UsageReport = {
+  turnCount: number;
+  totals: UsageBuckets;
+  lastTurn: UsageBuckets | null;
+  estimatedCostUsd: number;
+  turns: readonly UsageTurn[];
+};
+
+export function appendUsageTurn(
+  report: UsageReport,
+  turnUsage: UsageBuckets,
+  recordedAt: number,
+): UsageReport;
+
+export function serializeUsageReportJson(
+  report: UsageReport,
+  generatedAt?: number,
+): string;
+
+export function serializeUsageReportCsv(
+  report: UsageReport,
+  generatedAt?: number,
+): string;
+```
+
+### 3. Contracts
+
+- Each `response.done` event with a valid usage payload appends exactly one
+  `UsageTurn` and updates cumulative totals.
+- `recordedAt` and export `generatedAt` use Unix milliseconds.
+- JSON export must include metadata, prices used for estimates, summary,
+  totals, last turn, and per-turn rows.
+- CSV export must include one row per turn plus a `totals` row, even for an
+  empty session.
+- Export stays browser-local: do not add backend storage, analytics endpoints,
+  or new dependencies for the measurement PR.
+- If `OPENAI_API_KEY` is unavailable, do not fabricate A/B results. Ship export
+  support and mark measurement table rows as pending live runs.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected handling |
+| --- | --- |
+| `response.done` has no usage object | Ignore it and do not increment `turnCount`. |
+| Usage fields are missing, negative, or non-finite | Parse missing/invalid bucket values as `0`. |
+| Session has no turns | Export valid JSON and CSV with empty `turns` and a zero totals row. |
+| Browser has no configured Realtime key | Leave measurement results pending; do not hard-code sample costs. |
+
+### 5. Good/Base/Bad Cases
+
+- Good: a three-turn session exports three `turn` rows, one `totals` row, and
+  cumulative estimated cost that matches the usage meter.
+- Base: an empty session export still opens in spreadsheet tools and shows all
+  expected columns.
+- Bad: documentation claims measured savings when the values came from manual
+  estimates or an unauthenticated local run.
+
+### 6. Tests Required
+
+- Unit tests for `appendUsageTurn` preserving per-turn usage and cumulative
+  totals.
+- Unit tests for JSON export metadata, totals, last turn, and empty-session
+  behavior.
+- Unit tests for CSV header, per-turn rows, totals row, and empty-session
+  behavior.
+- Existing usage parsing tests must continue to cover invalid and partial
+  `response.done` payloads.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```typescript
+// Only exports the visible summary; loses per-turn evidence needed for A/B.
+const report = {
+  turns: usageReport.turnCount,
+  cost: usageReport.estimatedCostUsd,
+};
+```
+
+Correct:
+
+```typescript
+const csv = serializeUsageReportCsv(usageReport, Date.now());
+```
+
 ## Scenario: Visual Frame Sampling Cost Gate
 
 ### 1. Scope / Trigger

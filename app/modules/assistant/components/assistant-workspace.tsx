@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Camera,
   CircleStop,
+  Download,
   Gauge,
   Image as ImageIcon,
   Hand,
@@ -28,6 +29,8 @@ import {
 import {
   formatTokens,
   formatUsd,
+  serializeUsageReportCsv,
+  serializeUsageReportJson,
 } from "@/modules/assistant/lib/cost-model";
 import {
   createFrameSignatureFromImageData,
@@ -167,6 +170,10 @@ function isActiveSession(phase: AssistantPhase): boolean {
   );
 }
 
+function buildDownloadDataUrl(contentType: string, content: string): string {
+  return `data:${contentType};charset=utf-8,${encodeURIComponent(content)}`;
+}
+
 type CapturedFrame = {
   frameDataUrl: string;
   signature: FrameSignature;
@@ -246,6 +253,22 @@ export function AssistantWorkspace(): React.JSX.Element {
   });
 
   const hasRealtimeConnection = realtimeState.status === "connected";
+  const usageExport = useMemo(() => {
+    const generatedAt = Date.now();
+
+    return {
+      jsonDownloadUrl: buildDownloadDataUrl(
+        "application/json",
+        serializeUsageReportJson(usageReport, generatedAt),
+      ),
+      csvDownloadUrl: buildDownloadDataUrl(
+        "text/csv",
+        serializeUsageReportCsv(usageReport, generatedAt),
+      ),
+      jsonFilename: `realtime-usage-${generatedAt}.json`,
+      csvFilename: `realtime-usage-${generatedAt}.csv`,
+    };
+  }, [usageReport]);
   const activeTurnDetectionMode =
     realtimeState.costPolicy?.turnDetectionMode ?? turnDetectionMode;
   const activeResponseBudget =
@@ -1004,9 +1027,29 @@ export function AssistantWorkspace(): React.JSX.Element {
         </div>
 
         <div className="usage-panel" aria-label="Realtime usage meter">
-          <div className="panel-heading">
-            <Activity size={18} aria-hidden="true" />
-            <span>Usage meter</span>
+          <div className="usage-heading-row">
+            <div className="panel-heading">
+              <Activity size={18} aria-hidden="true" />
+              <span>Usage meter</span>
+            </div>
+            <div className="usage-export-actions" aria-label="Usage export">
+              <a
+                className="usage-export-button"
+                href={usageExport.jsonDownloadUrl}
+                download={usageExport.jsonFilename}
+              >
+                <Download size={14} aria-hidden="true" />
+                <span>JSON</span>
+              </a>
+              <a
+                className="usage-export-button"
+                href={usageExport.csvDownloadUrl}
+                download={usageExport.csvFilename}
+              >
+                <Download size={14} aria-hidden="true" />
+                <span>CSV</span>
+              </a>
+            </div>
           </div>
 
           <dl className="usage-headline">
