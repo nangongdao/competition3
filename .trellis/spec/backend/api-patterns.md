@@ -71,6 +71,89 @@ return { success: true, workspace };  // Consistent
 
 ## Common Patterns
 
+### Scenario: Chat Completions Compatibility Endpoint
+
+#### 1. Scope / Trigger
+
+- Trigger: adding or changing a backend endpoint that calls an ordinary
+  OpenAI-compatible `/chat/completions` provider for text plus optional camera
+  frame input.
+- This is the broad third-party provider path; do not require Realtime/WebRTC
+  support for this mode.
+
+#### 2. Signatures
+
+- Route: `POST /api/chat/completion`
+- Request schema source: `src/worker/routes/chat/types.ts`
+- Hono app mount: `app.route("/api/chat", chatRoutes)`
+
+#### 3. Contracts
+
+Request JSON:
+
+| Field | Type | Required | Constraints |
+| --- | --- | :---: | --- |
+| `message` | `string` | Yes | Trimmed, 1 to 4000 chars |
+| `imageDataUrl` | `string` | No | Must start with `data:image/`; use only with vision-capable models |
+| `responseBudget` | `"brief" \| "standard" \| "detailed"` | No | Defaults to `"standard"`; maps to upstream `max_tokens` |
+| `instructions` | `string` | No | Trimmed, 1 to 1200 chars when present |
+
+Success response:
+
+```typescript
+{
+  success: true,
+  answer: string,
+  model: string,
+}
+```
+
+Environment:
+
+| Key | Required | Notes |
+| --- | :---: | --- |
+| `OPENAI_API_KEY` | Yes for real calls | Worker secret or `.dev.vars`; never a frontend `VITE_` variable |
+| `OPENAI_PROVIDER_MODE` | No | `chat` or `realtime`; frontend default only, defaults to `chat` |
+| `OPENAI_BASE_URL` | No | Shared provider root, default `https://api.openai.com/v1` |
+| `OPENAI_CHAT_BASE_URL` | No | Chat-specific provider root override |
+| `OPENAI_CHAT_COMPLETIONS_PATH` | No | Defaults to `/chat/completions` |
+| `OPENAI_CHAT_COMPLETIONS_URL` | No | Full endpoint override when base plus path cannot represent provider routing |
+| `OPENAI_CHAT_MODEL` | Yes | Chat or vision-chat provider model ID |
+
+#### 4. Validation & Error Matrix
+
+| Condition | Status | Response |
+| --- | ---: | --- |
+| Missing `OPENAI_API_KEY` | 503 | `{ success: false, code: "missing_openai_api_key" }` |
+| Missing `OPENAI_CHAT_MODEL` | 503 | `{ success: false, code: "missing_chat_model" }` |
+| Invalid provider URL config | 503 | `{ success: false, code: "invalid_chat_provider_config" }` |
+| Zod validation failure | 400 | `{ success: false, code: "invalid_request" }` |
+| Provider request failure | 502 | `{ success: false, code: "chat_completion_failed" }` |
+| Provider response lacks text content | 502 | `{ success: false, code: "invalid_chat_completion_response" }` |
+| Provider success | 200 | `{ success: true, answer, model }` |
+
+#### 5. Good/Base/Bad Cases
+
+- Good: browser sends text and an optional sampled JPEG data URL to the Worker;
+  Worker calls the provider with `messages` containing text and `image_url`
+  content blocks.
+- Base: text-only models can answer typed messages but cannot understand camera
+  frames.
+- Bad: browser code stores the permanent API key, provider base URL, or model
+  secret in `VITE_*`, localStorage, or query parameters.
+- Bad: Chat mode is treated as a Realtime session; it is ordinary stateless HTTP
+  and does not stream microphone audio.
+
+#### 6. Tests Required
+
+- Missing key maps to 503.
+- Missing chat model maps to 503.
+- Invalid provider URL configuration maps to 503.
+- Invalid input maps to 400.
+- Upstream provider failure maps to 502.
+- Success test asserts the upstream URL, model, `max_tokens`, and text plus
+  `image_url` message shape.
+
 ### Scenario: Realtime Session Creation Endpoint
 
 #### 1. Scope / Trigger

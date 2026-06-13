@@ -58,6 +58,7 @@ useless input, then cap output, then write down the measured results.**
 | pending | `docs/design-measurement-backfill` | Measurement backfill support: usage-meter JSON/CSV export, repeatable measurement protocol, pending evidence table scaffold | in progress |
 | pending | `feat/chinese-interface-localization` | Chinese default interface localization: primary workspace labels, controls, transcript notices, accessibility labels, and Realtime client error messages | in progress |
 | pending | `feat/third-party-realtime-provider` | Third-party Realtime provider configuration: Worker-side base URL/path/full URL overrides, browser uses returned `webrtcUrl`, README startup commands, and local PowerShell startup helper | in progress |
+| pending | `feat/chat-completions-provider-mode` | Chat Completions compatibility mode: ordinary `/chat/completions` Worker route, safe provider-mode config endpoint, frontend mode switch, and third-party startup helper | in progress |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission
@@ -93,7 +94,7 @@ future session can implement it without re-deriving the design.
 * **Why client-side**: the diff runs on free browser CPU in milliseconds;
   the alternative (let the model decide) costs tokens to evaluate.
 * **Verification**: unit tests on synthetic luma grids (identical, noise,
-  scene change); manual A/B with a static scene — skipped count should
+  scene change); manual A/B with a static scene ? skipped count should
   dominate; usage meter image-input bucket grows slower with diff on.
 
 ### 3.2 Push-to-talk and microphone mute (in progress)
@@ -111,7 +112,7 @@ future session can implement it without re-deriving the design.
   * In push-to-talk, a hold-to-speak button (pointer/keyboard events)
     enables the mic track only while held; on release send
     `input_audio_buffer.commit` + `response.create` over the data channel.
-  * Independent mute toggle: `audioTrack.enabled = false` — no renegotiation
+  * Independent mute toggle: `audioTrack.enabled = false` ? no renegotiation
     needed, works in both modes.
 * **Current implementation**: the browser exposes a locked-per-session turn
   mode selector, a live mute toggle, and a hold control that arms the audio
@@ -166,7 +167,7 @@ fixed 10-minute cap.*
   120 seconds idle. The existing 10-minute hard cap remains unchanged, and the
   cost panel shows the idle close policy.
 
-### 3.5 Design-doc measurement backfill (in progress — final cost PR)
+### 3.5 Design-doc measurement backfill (in progress ? final cost PR)
 
 *Deliverable lever: the contest asks "which techniques did you consider,
 which did you adopt"; adopted ones need measured evidence.*
@@ -194,6 +195,7 @@ which did you adopt"; adopted ones need measured evidence.*
 | Cloudflare deployment | `wrangler deploy` with `OPENAI_API_KEY` secret; document the public demo URL in README | Needs the owner's Cloudflare account/decision; everything already runs on Workers |
 | Text-history summarization | After N turns, replace old text items with a compact summary item (client-built, then prune originals) | Real snowball reduction for long chats, but riskier UX (model may "forget" details); frames were the cheap 80% |
 | Session usage export | Download per-turn usage as JSON/CSV from the meter | Absorbed into 3.5 as the measurement export path |
+| Chat Completions compatibility | Worker HTTP adapter for third-party `/chat/completions` providers, plus a frontend mode switch that does not require WebRTC | Shipped as `feat/chat-completions-provider-mode`; audio streaming stays in Realtime mode |
 
 ---
 

@@ -598,6 +598,78 @@ When the session changes (login/logout), invalidate all user-scoped caches:
 
 ---
 
+## Scenario: Browser Chat Completions Compatibility Hooks
+
+### 1. Scope / Trigger
+
+- Trigger: adding or changing browser hooks that call a Worker-backed ordinary
+  Chat Completions provider.
+- This mode is for broad third-party API compatibility and must not assume
+  Realtime/WebRTC support.
+
+### 2. Signatures
+
+- Provider config hook: `app/modules/assistant/hooks/use-provider-config.ts`
+- Chat mutation hook: `app/modules/assistant/hooks/use-chat-completion.ts`
+- Config API: `GET /api/provider/config`
+- Completion API: `POST /api/chat/completion`
+
+```typescript
+type ProviderMode = "chat" | "realtime";
+
+type SendChatCompletionInput = {
+  message: string;
+  imageDataUrl?: string;
+  responseBudget: "brief" | "standard" | "detailed";
+  instructions?: string;
+};
+```
+
+### 3. Contracts
+
+- The browser must call same-origin Worker endpoints only.
+- Permanent `OPENAI_API_KEY`, provider base URLs, and model routing values must
+  never be exposed through frontend settings, `VITE_*`, localStorage, or URLs.
+- `useProviderConfig` may expose only safe non-secret defaults such as
+  `providerMode`.
+- Chat mode does not require a Realtime session, data channel, or WebRTC peer
+  connection.
+- Typed messages in Chat mode call `/api/chat/completion` directly.
+- Visual questions in Chat mode capture one JPEG frame and send it as
+  `imageDataUrl` with the user message.
+- Chat mode does not stream microphone audio and does not produce assistant
+  audio unless a future STT/TTS adapter is added.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected handling |
+| --- | --- |
+| Provider config fetch fails | Keep default `chat` mode and surface a non-blocking error. |
+| Missing Worker key or chat model | Surface the Worker error in the transcript/error banner. |
+| Chat request is in flight | Disable duplicate text/frame sends until it completes. |
+| Chat success | Append assistant text to the transcript and return to ready/idle. |
+| Chat failure | Move to error phase and keep media preview usable. |
+| User switches from Realtime to Chat while connected | Stop the Realtime connection before switching modes. |
+
+### 5. Good/Base/Bad Cases
+
+- Good: user opens the app with `OPENAI_PROVIDER_MODE=chat`, grants media, and
+  asks a camera-frame question without starting a Realtime session.
+- Base: user sends typed text with no media permission; Chat mode still works
+  for text-only providers.
+- Bad: Chat mode prompts the user to start a Realtime session before sending
+  text.
+- Bad: Chat mode tries to use microphone audio without an STT adapter.
+
+### 6. Tests Required
+
+- Worker route tests cover the API contract; frontend typecheck must verify the
+  hooks consume backend response types through type-only imports.
+- Manual browser smoke test should cover mode switching, text submit in Chat
+  mode, and one visual question with media permission.
+
+---
+
 ## Scenario: Browser Realtime WebRTC Session Hook
 
 ### 1. Scope / Trigger

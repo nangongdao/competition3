@@ -7,3 +7,4 @@ assets = { directory = "./dist", binding = "ASSETS", not_found_handling = "singl
 
 [vars]
 ENVIRONMENT = "development"
+OPENAI_PROVIDER_MODE = "chat"

@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 
+import { chatRoutes } from "./routes/chat/router";
+import { providerRoutes } from "./routes/provider/router";
 import { realtimeRoutes } from "./routes/realtime/router";
 import type { AppEnv, HealthResponse } from "./types";
 
@@ -9,6 +11,8 @@ const app = new Hono<AppEnv>();
 
 app.use("*", secureHeaders());
 
+app.route("/api/chat", chatRoutes);
+app.route("/api/provider", providerRoutes);
 app.route("/api/realtime", realtimeRoutes);
 
 app.get("/api/health", (c) => {

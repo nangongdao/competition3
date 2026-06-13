@@ -10,6 +10,9 @@ boundary in place:
 * Vite + React + TypeScript frontend
 * Cloudflare Workers backend entry with Hono
 * `/api/health` endpoint
+* `/api/provider/config` endpoint for safe non-secret provider mode defaults
+* `/api/chat/completion` endpoint for OpenAI-compatible Chat Completions
+  providers
 * `/api/realtime/session` endpoint for Worker-created short-lived Realtime sessions
 * Tailwind CSS v4 setup
 * Browser camera and microphone permission flow
@@ -26,11 +29,14 @@ boundary in place:
   with modality buckets and an estimated cost
 * Conversation history pruning that deletes consumed camera frames so they
   are billed once instead of on every later turn
+* Chat Completions compatibility mode for third-party OpenAI-compatible API
+  sites that do not support Realtime/WebRTC
 * ESLint, typecheck, build, and preview scripts
 * Dependency and environment documentation
 
-The media workspace remains usable without model credentials. A real Realtime
-session requires the Worker endpoint and `OPENAI_API_KEY`.
+The media workspace remains usable without model credentials. Real model calls
+require the Worker endpoint and `OPENAI_API_KEY`. Chat Completions mode also
+requires `OPENAI_CHAT_MODEL`; Realtime mode requires a Realtime-capable model.
 
 ## Requirements
 
@@ -82,7 +88,59 @@ curl -X POST http://localhost:8787/api/realtime/session \
   -d "{\"visualContextMode\":\"manual\",\"turnDetectionMode\":\"server-vad\"}"
 ```
 
+Chat Completions check:
+
+```bash
+curl -X POST http://localhost:8787/api/chat/completion \
+  -H "Content-Type: application/json" \
+  -d "{\"message\":\"hello\",\"responseBudget\":\"brief\"}"
+```
+
+## Windows Quick Start With Third-Party Chat Completions
+
+This is the recommended mode for most third-party API sites because they
+usually support `/v1/chat/completions`, not OpenAI Realtime WebRTC.
+
+```powershell
+cd E:\competition3
+corepack enable
+corepack prepare pnpm@11.6.0 --activate
+corepack pnpm install
+.\scripts\start-chat-worker.ps1 `
+  -ApiKey "your-provider-key" `
+  -BaseUrl "https://api.your-provider.example/v1" `
+  -ChatModel "your-vision-chat-model"
+```
+
+Open the Worker URL after startup:
+
+```text
+http://localhost:8787
+```
+
+If the provider uses a custom Chat Completions path:
+
+```powershell
+.\scripts\start-chat-worker.ps1 `
+  -ApiKey "your-provider-key" `
+  -BaseUrl "https://api.your-provider.example/v1" `
+  -ChatCompletionsPath "/chat/completions" `
+  -ChatModel "your-vision-chat-model"
+```
+
+If the provider requires a completely custom endpoint URL:
+
+```powershell
+.\scripts\start-chat-worker.ps1 `
+  -ApiKey "your-provider-key" `
+  -ChatCompletionsUrl "https://api.your-provider.example/custom/chat" `
+  -ChatModel "your-vision-chat-model"
+```
+
 ## Windows Quick Start With Realtime
+
+Use this only when the provider explicitly supports OpenAI-style Realtime
+session creation plus WebRTC SDP exchange.
 
 PowerShell startup command for the default OpenAI Realtime endpoint:
 
@@ -153,7 +211,12 @@ Worker runtime variables:
 ```bash
 OPENAI_API_KEY=sk-...
 ENVIRONMENT=development
+OPENAI_PROVIDER_MODE=chat
 OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_CHAT_BASE_URL=
+OPENAI_CHAT_COMPLETIONS_PATH=/chat/completions
+OPENAI_CHAT_COMPLETIONS_URL=
+OPENAI_CHAT_MODEL=
 OPENAI_REALTIME_BASE_URL=
 OPENAI_REALTIME_SESSION_PATH=/realtime/sessions
 OPENAI_REALTIME_WEBRTC_PATH=/realtime
@@ -170,9 +233,21 @@ Parameter meanings:
   through `VITE_` variables, browser settings, localStorage, or URLs.
 * `ENVIRONMENT`: Runtime label returned by `/api/health`; use `development`
   locally.
+* `OPENAI_PROVIDER_MODE`: Frontend default provider mode. Use `chat` for
+  ordinary OpenAI-compatible Chat Completions providers, or `realtime` for
+  Realtime/WebRTC providers. Defaults to `chat` when unset or invalid.
 * `OPENAI_BASE_URL`: OpenAI-compatible API root. Defaults to
   `https://api.openai.com/v1`. For many third-party providers this is the only
   URL parameter you need to change.
+* `OPENAI_CHAT_BASE_URL`: Optional Chat Completions-specific API root. If set,
+  it overrides `OPENAI_BASE_URL` only for `/api/chat/completion`.
+* `OPENAI_CHAT_COMPLETIONS_PATH`: Path appended to the selected Chat base URL.
+  Default: `/chat/completions`.
+* `OPENAI_CHAT_COMPLETIONS_URL`: Optional full Chat Completions endpoint URL.
+  Use only when the provider cannot be represented by base URL plus path.
+* `OPENAI_CHAT_MODEL`: Provider model ID used for Chat Completions mode. This
+  is required for real Chat Completions calls. Use a vision-capable model if
+  you want camera-frame understanding.
 * `OPENAI_REALTIME_BASE_URL`: Optional Realtime-specific API root. If set, it
   overrides `OPENAI_BASE_URL` only for Realtime session creation and WebRTC SDP
   exchange.
@@ -192,15 +267,34 @@ Parameter meanings:
 Frontend variables must use the `VITE_` prefix and must not contain secrets.
 
 If `OPENAI_API_KEY` is not configured, the frontend still runs locally and the
-Worker session endpoint returns a configuration error instead of exposing a
-browser-side key. The Start session control will surface that configuration
-error in the transcript.
+Worker endpoints return configuration errors instead of exposing a browser-side
+key. Chat mode will also report a configuration error until
+`OPENAI_CHAT_MODEL` is set.
 
 ## Third-Party Provider Requirements
 
-This app does not use ordinary Chat Completions. A provider that says it is
-"OpenAI compatible" is not enough unless it also implements the Realtime WebRTC
-surface used here.
+### Chat Completions mode
+
+This mode is intended for broad third-party compatibility. The provider/model
+must support:
+
+* `POST /v1/chat/completions` or a configurable equivalent endpoint.
+* Bearer API key authentication.
+* A request body with `model`, `messages`, and `max_tokens`.
+* User message content as plain text.
+* `choices[0].message.content` text in the response.
+* For camera-frame understanding: multimodal message content with
+  `type: "image_url"` and a `data:image/...` URL. Text-only chat models can
+  still answer typed questions, but they cannot understand the sampled frame.
+
+Chat mode does not stream microphone audio and does not generate voice output.
+If you need voice in Chat mode, the provider must also expose separate STT/TTS
+APIs or the app needs a future browser speech adapter.
+
+### Realtime mode
+
+Realtime is optional. A provider that says it is "OpenAI compatible" is not
+enough unless it also implements the Realtime WebRTC surface used here.
 
 The provider/model must support:
 

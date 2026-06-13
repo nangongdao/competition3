@@ -14,13 +14,19 @@ server side.
 * Frontend: Vite, React, TypeScript, Tailwind CSS v4.
 * Backend: Cloudflare Worker with Hono routes.
 * Media: browser `getUserMedia` for camera and microphone permissions.
-* AI session boundary: Worker endpoint creates short-lived OpenAI-compatible
-  Realtime sessions using `OPENAI_API_KEY` and configurable provider URLs.
+* AI provider boundary: Worker endpoints keep `OPENAI_API_KEY` server-side and
+  support two modes:
+  * Chat Completions compatibility mode for ordinary OpenAI-compatible
+    `/chat/completions` providers.
+  * Realtime mode for providers that support short-lived sessions plus WebRTC
+    SDP exchange.
 * Visual context: browser samples selected camera frames instead of streaming
   raw video continuously.
 * Realtime transport: browser WebRTC peer connection sends microphone audio,
   receives assistant audio, and uses the data channel for sampled visual
   context events.
+* Chat transport: browser sends text plus an optional sampled JPEG frame to the
+  Worker, which calls the configured Chat Completions endpoint over HTTP.
 
 ## User Stories
 
@@ -33,6 +39,8 @@ server side.
 | See listening, thinking, responding, connected, and error states | Implemented | State ring, media status, transcript, and error banner cover these states. |
 | Sample visual context frames | Implemented | Manual sampling and low-frequency interval controls capture JPEG frames to canvas. |
 | Create a key-safe AI session | Implemented | `POST /api/realtime/session` creates a server-side Realtime session when `OPENAI_API_KEY` is configured. Provider URLs can target OpenAI or a third-party Realtime-compatible API. |
+| Use third-party Chat Completions providers | Implemented | `POST /api/chat/completion` lets the browser send text and optional sampled frames through the Worker to an OpenAI-compatible Chat Completions provider. |
+| Pick the provider protocol | Implemented | `/api/provider/config` exposes the non-secret default mode, and the workspace can switch between Chat Completions compatibility and Realtime. |
 | Stream low-latency voice to the model | Implemented | The browser posts an SDP offer with the short-lived client secret and plays the remote audio stream. |
 | Avoid noisy-room voice false positives | Implemented | The session can run in push-to-talk mode, which disables server VAD and commits audio only after the user releases the hold control. |
 | Mute the microphone during a live session | Implemented | The workspace toggles the local audio track with `MediaStreamTrack.enabled` without renegotiating WebRTC. |
@@ -81,6 +89,11 @@ image in 5, text in 4, text out 16, cached in 0.4):
   OpenAI-compatible Realtime base URL/path overrides and returns the browser
   SDP endpoint as `webrtcUrl`, so permanent keys and provider routing stay
   server-side.
+* **Chat Completions compatibility (implemented)**: the Worker accepts
+  ordinary OpenAI-compatible Chat Completions base URL/path/full URL overrides
+  and uses `OPENAI_CHAT_MODEL` for text plus optional `image_url` data URL
+  requests. This is the broadest third-party provider path because it does not
+  require Realtime/WebRTC support.
 * **Compact default instructions (implemented)**: the Worker sends a short
   default Realtime instruction block.
 * **Local fallback (implemented)**: without `OPENAI_API_KEY`, the media
@@ -150,9 +163,11 @@ or CSV files with the PR notes so the table below can be audited.
 
 * Browser camera and microphone behavior must be manually tested because it
   depends on local hardware and browser permission prompts.
-* End-to-end Realtime behavior requires `pnpm dev:worker` or deployment with a
-  configured `OPENAI_API_KEY`; plain Vite dev mode does not provide the Worker
-  API endpoint.
+* End-to-end Chat or Realtime behavior requires `pnpm dev:worker` or deployment
+  with a configured `OPENAI_API_KEY`; plain Vite dev mode does not provide the
+  Worker API endpoint.
+* Chat Completions mode needs `OPENAI_CHAT_MODEL`; use a model that supports
+  image input if testing camera-frame understanding.
 * The measurement table above still needs live Realtime runs from an environment
   with `OPENAI_API_KEY`; this local development environment did not expose the
   key.

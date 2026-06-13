@@ -317,6 +317,12 @@ h1 {
   padding-top: 4px;
 }
 
+.provider-controls {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
 .response-controls {
   display: grid;
   gap: 12px;
