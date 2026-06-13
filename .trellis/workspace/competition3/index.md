@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-06-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~207 | Active |
+| `journal-1.md` | ~240 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-06-13 | Document development roadmap | `b576e2b` | `docs/development-roadmap` |
 | 6 | 2026-06-13 | Conversation history frame pruning | `97442c9` | `feat/history-frame-pruning` |
 | 5 | 2026-06-13 | Realtime usage cost meter | `e3a3e72` | `feat/realtime-usage-cost-meter` |
 | 4 | 2026-06-13 | Text message composer for realtime dialogue | `da6c0b6` | `feat/text-input-dialogue` |
