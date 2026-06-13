@@ -6,9 +6,9 @@
 > (architecture and user stories) and the contest brief in
 > [`../task.md`](../task.md).
 >
-> Status legend: `shipped` (merged or in an open PR), `in progress`
-> (implemented locally before PR publication), `planned` (committed direction
-> with a concrete method), `candidate` (worth doing if time allows).
+> Status legend: `shipped` (merged into `main`), `external` (requires
+> credentials, hardware, account access, or reviewer environment), `candidate`
+> (worth doing if time allows).
 
 ---
 
@@ -48,19 +48,21 @@ useless input, then cap output, then write down the measured results.**
 | PR | Branch | Increment | Status |
 | --- | --- | --- | --- |
 | #1 | `docs/pr-workflow-requirements` | PR workflow + git sync/fallback docs | merged |
-| #2 | `feat/text-input-dialogue` | Text message composer over the Realtime data channel | open, stacked base |
-| #3 | `feat/realtime-usage-cost-meter` | Usage meter: parses `response.done` usage into modality buckets, USD estimate, last-turn input (snowball indicator); 12 unit tests | open, stacked on #2 |
-| #4 | `feat/history-frame-pruning` | History frame pruning: consumed frame items deleted via `conversation.item.delete` (pending -> in-flight -> consumed tracker, `evt_prune_` tagged deletes, silenced races); toggle + pruned counter; 10 unit tests | open, stacked on #3 |
-| #6 | `feat/frame-difference-sampling` | Frame-difference sampling: downscaled luma diff skips low-change interval uploads, manual frame actions bypass the gate, sent/skipped counters show savings; 8 unit tests | open, stacked on #5 |
-| #7 | `feat/push-to-talk-microphone-mute` | Push-to-talk and microphone mute: session-level turn detection mode, PTT audio buffer commit, live `MediaStreamTrack.enabled` mute, Worker payload mapping tests | open, stacked on #6 |
-| pending | `feat/response-budgets` | Response budgets: Worker-enforced output token caps, brief-mode instruction, text-only `response.create` mode, cost-panel policy display, Worker/client tests | in progress |
-| pending | `feat/idle-auto-disconnect` | Idle auto-disconnect: activity-based warning and disconnect timers, transcript notices, cost-panel policy display, client helper tests | in progress |
-| pending | `docs/design-measurement-backfill` | Measurement backfill support: usage-meter JSON/CSV export, repeatable measurement protocol, pending evidence table scaffold | in progress |
-| pending | `feat/chinese-interface-localization` | Chinese default interface localization: primary workspace labels, controls, transcript notices, accessibility labels, and Realtime client error messages | in progress |
-| pending | `feat/third-party-realtime-provider` | Third-party Realtime provider configuration: Worker-side base URL/path/full URL overrides, browser uses returned `webrtcUrl`, README startup commands, and local PowerShell startup helper | in progress |
-| pending | `feat/chat-completions-provider-mode` | Chat Completions compatibility mode: ordinary `/chat/completions` Worker route, safe provider-mode config endpoint, frontend mode switch, and third-party startup helper | in progress |
-| pending | `feat/chat-mode-browser-speech-adapter` | Browser speech adapter for Chat mode: Web Speech dictation fills the existing Chat text composer and optional speech synthesis reads Chat answers without provider audio tokens | in progress |
-| pending | `docs/final-demo-packaging` | Final demo packaging: local readiness script plus no-key, Chat Completions, Realtime, hardware, and cost-evidence verification checklist | in progress |
+| #2 | `feat/text-input-dialogue` | Text message composer over the Realtime data channel | merged |
+| #3 | `feat/realtime-usage-cost-meter` | Usage meter: parses `response.done` usage into modality buckets, USD estimate, last-turn input (snowball indicator); 12 unit tests | merged |
+| #4 | `feat/history-frame-pruning` | History frame pruning: consumed frame items deleted via `conversation.item.delete` (pending -> in-flight -> consumed tracker, `evt_prune_` tagged deletes, silenced races); toggle + pruned counter; 10 unit tests | merged |
+| #5 | `docs/development-roadmap` | Cost-driven development roadmap and delivery sequencing | merged |
+| #6 | `feat/frame-difference-sampling` | Frame-difference sampling: downscaled luma diff skips low-change interval uploads, manual frame actions bypass the gate, sent/skipped counters show savings; 8 unit tests | merged |
+| #7 | `feat/push-to-talk-microphone-mute` | Push-to-talk and microphone mute: session-level turn detection mode, PTT audio buffer commit, live `MediaStreamTrack.enabled` mute, Worker payload mapping tests | merged |
+| #8 | `docs/github-api-push-fallback-guidance` | GitHub API fallback workflow for unreliable HTTPS pushes | merged |
+| #9 | `feat/response-budgets` | Response budgets: Worker-enforced output token caps, brief-mode instruction, text-only `response.create` mode, cost-panel policy display, Worker/client tests | merged |
+| #10 | `feat/idle-auto-disconnect` | Idle auto-disconnect: activity-based warning and disconnect timers, transcript notices, cost-panel policy display, client helper tests | merged |
+| #11 | `docs/design-measurement-backfill` | Measurement backfill support: usage-meter JSON/CSV export, repeatable measurement protocol, pending evidence table scaffold | merged |
+| #12 | `feat/chinese-interface-localization` | Chinese default interface localization: primary workspace labels, controls, transcript notices, accessibility labels, and Realtime client error messages | merged |
+| #13 | `feat/third-party-realtime-provider` | Third-party Realtime provider configuration: Worker-side base URL/path/full URL overrides, browser uses returned `webrtcUrl`, README startup commands, and local PowerShell startup helper | merged |
+| #14 | `feat/chat-completions-provider-mode` | Chat Completions compatibility mode: ordinary `/chat/completions` Worker route, safe provider-mode config endpoint, frontend mode switch, and third-party startup helper | merged |
+| #15 | `feat/chat-mode-browser-speech-adapter` | Browser speech adapter for Chat mode: Web Speech dictation fills the existing Chat text composer and optional speech synthesis reads Chat answers without provider audio tokens | merged |
+| #16 | `docs/final-demo-packaging` | Final demo packaging: local readiness script plus no-key, Chat Completions, Realtime, hardware, and cost-evidence verification checklist | merged |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission
@@ -99,7 +101,7 @@ future session can implement it without re-deriving the design.
   scene change); manual A/B with a static scene ? skipped count should
   dominate; usage meter image-input bucket grows slower with diff on.
 
-### 3.2 Push-to-talk and microphone mute (in progress)
+### 3.2 Push-to-talk and microphone mute (shipped)
 
 *Cost lever: eliminate VAD false-positive turns in noisy environments.*
 
@@ -125,7 +127,7 @@ future session can implement it without re-deriving the design.
   events arrive while muted/not holding; usage meter audio-input bucket
   stays flat during background noise in push-to-talk mode.
 
-### 3.3 Response budgets (in progress)
+### 3.3 Response budgets (shipped)
 
 *Cost lever: audio output is the most expensive bucket; cap it.*
 
@@ -147,7 +149,7 @@ future session can implement it without re-deriving the design.
   output-audio bucket drops in text-only mode; transcript still renders
   text responses.
 
-### 3.4 Idle auto-disconnect (in progress)
+### 3.4 Idle auto-disconnect (shipped)
 
 *Cost lever: stop paying for forgotten-open sessions; smarter than the
 fixed 10-minute cap.*
@@ -169,7 +171,7 @@ fixed 10-minute cap.*
   120 seconds idle. The existing 10-minute hard cap remains unchanged, and the
   cost panel shows the idle close policy.
 
-### 3.5 Design-doc measurement backfill (in progress ? final cost PR)
+### 3.5 Design-doc measurement backfill support (shipped; live runs pending)
 
 *Deliverable lever: the contest asks "which techniques did you consider,
 which did you adopt"; adopted ones need measured evidence.*
@@ -184,10 +186,13 @@ which did you adopt"; adopted ones need measured evidence.*
   usage buckets, session totals, and estimated USD cost. `design.md` includes
   the measurement protocol and a pending results table. The live A/B values
   still require a configured `OPENAI_API_KEY` and local camera/mic test runs.
+* **Remaining external work**: live A/B values still need an environment with
+  `OPENAI_API_KEY`, camera, and microphone access. This should happen after
+  overall delivery readiness, not as part of the main feature-completion pass.
 * **Verification**: the table cites the usage meter (authoritative
   `response.done` usage), not hand-waving.
 
-### 3.6 Final contest demo packaging (in progress)
+### 3.6 Final contest demo packaging (shipped)
 
 *Deliverable lever: the app should be reproducible by reviewers at any point in
 the final pass.*
@@ -219,10 +224,14 @@ the final pass.*
 
 ## 5. Sequencing and Delivery Rules
 
-* Order: 3.1 -> 3.2 -> 3.3 -> 3.4 -> 3.5, then candidates. Measurement
-  (already shipped in #3) stays ahead of every optimization so each PR can
-  prove its effect.
-* One increment per PR; stacked PRs merge base-first (#2 -> #3 -> #4 -> ...).
+* The main feature and demo-readiness chain has been merged into `main` through
+  PR #16.
+* Remaining work after the main completion pass is external/candidate work:
+  live cost measurement with `OPENAI_API_KEY`, hardware/provider demo checks,
+  Cloudflare deployment with owner account access, and optional text-history
+  summarization.
+* One increment per PR; stacked PRs were merged base-first (#2 -> #3 -> #4 ->
+  ... -> #16).
 * Every PR: feature description, implementation approach, verification
   method, dependency disclosure (per `task.md` and
   `.trellis/spec/shared/pr-workflow.md`).
