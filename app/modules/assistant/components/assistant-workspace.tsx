@@ -112,6 +112,7 @@ export function AssistantWorkspace(): React.JSX.Element {
   const [sampledFrameCount, setSampledFrameCount] = useState(0);
   const [isAutoSampling, setIsAutoSampling] = useState(false);
   const [samplingIntervalSeconds, setSamplingIntervalSeconds] = useState(8);
+  const [isFramePruningEnabled, setIsFramePruningEnabled] = useState(true);
   const [textDraft, setTextDraft] = useState("");
   const nextEntryIdRef = useRef(initialTranscript.length);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -147,6 +148,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     realtimeState,
     remoteStream,
     usageReport,
+    prunedFrameCount,
     startSession: startRealtimeSession,
     stopSession: stopRealtimeSession,
     sendVisualContext,
@@ -155,6 +157,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     stream,
     onTranscript: addTranscript,
     onPhaseChange: handleRealtimePhaseChange,
+    pruneConsumedFrames: isFramePruningEnabled,
   });
 
   const hasRealtimeConnection = realtimeState.status === "connected";
@@ -406,6 +409,12 @@ export function AssistantWorkspace(): React.JSX.Element {
     setIsAutoSampling(event.currentTarget.checked);
   };
 
+  const handleFramePruningChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): void => {
+    setIsFramePruningEnabled(event.currentTarget.checked);
+  };
+
   const handleTextDraftChange = (
     event: React.ChangeEvent<HTMLInputElement>,
   ): void => {
@@ -611,6 +620,15 @@ export function AssistantWorkspace(): React.JSX.Element {
               />
               <strong>{samplingIntervalSeconds}s</strong>
             </label>
+
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={isFramePruningEnabled}
+                onChange={handleFramePruningChange}
+              />
+              <span>Prune consumed frames from history</span>
+            </label>
           </div>
         </div>
 
@@ -740,6 +758,10 @@ export function AssistantWorkspace(): React.JSX.Element {
             <div>
               <dt>Frames</dt>
               <dd>{sampledFrameCount}</dd>
+            </div>
+            <div>
+              <dt>Pruned</dt>
+              <dd>{prunedFrameCount}</dd>
             </div>
             <div>
               <dt>Mode</dt>

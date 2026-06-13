@@ -34,6 +34,7 @@ server side.
 | Send sampled frames into model context | Implemented | Manual and interval samples are sent as `conversation.item.create` data-channel events. |
 | Type a text message during a session | Implemented | A composer in the dialogue board sends text-only conversation items over the data channel and requests a response. |
 | See real token usage and estimated cost per session | Implemented | The usage meter parses authoritative `response.done` usage events into modality buckets with a USD estimate. |
+| Stop paying for consumed camera frames on later turns | Implemented | Consumed frame items are deleted from the server-side conversation after each response, with a visible pruned counter and an opt-out toggle. |
 | Package final contest demo | Planned | Final pass should include verification notes and PR descriptions. |
 
 ## Cost Controls
@@ -71,9 +72,20 @@ image in 5, text in 4, text out 16, cached in 0.4):
   default Realtime instruction block.
 * **Local fallback (implemented)**: without `OPENAI_API_KEY`, the media
   workspace remains runnable and session start reports a configuration error.
-* **Conversation history pruning (planned)**: delete consumed image frames
-  from the server-side conversation via `conversation.item.delete` so each
-  frame is billed once instead of on every later turn.
+* **Conversation history pruning (implemented)**: after each response
+  completes, the frame items it consumed are deleted from the server-side
+  conversation via `conversation.item.delete`, so each sampled frame is
+  billed once instead of on every later turn. The tracker only deletes
+  frames that were actually inside a completed response's context; frames
+  sampled mid-response wait for the next one. Trade-off documented honestly:
+  deleting items invalidates the prompt-cache suffix after the deletion
+  point, but consumed frames sit at the conversation tail, so the cached
+  prefix for earlier history survives and the uncached full-rate re-billing
+  of frames (which pruning removes) dominates the small cache loss. The
+  workspace shows a pruned-frame counter, and a toggle (default on) lets the
+  demo compare snowball vs pruned sessions in the usage meter. Prune-delete
+  errors for already-removed items are tagged with an `evt_prune_` event id
+  and silenced instead of breaking the session.
 * **Frame-difference sampling (planned)**: client-side downscaled grayscale
   diff between consecutive samples; skip upload when the scene has not
   changed.

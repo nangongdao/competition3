@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Tracker state machine and event guards must follow TS conventions"}
+{"file": ".trellis/spec/frontend/quality.md", "reason": "Vitest unit test patterns and frontend quality gates"}
+{"file": ".trellis/spec/frontend/components.md", "reason": "Prune toggle UI must follow component patterns"}
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "Shared code quality rules"}
+{"file": ".trellis/spec/shared/pr-workflow.md", "reason": "Stacked branch/PR delivery requirements"}

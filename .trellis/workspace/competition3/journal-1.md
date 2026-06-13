@@ -172,3 +172,36 @@ Built the cost measurement foundation: cost-model.ts parses response.done usage 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Conversation history frame pruning
+
+**Date**: 2026-06-13
+**Task**: Conversation history frame pruning
+**Branch**: `feat/history-frame-pruning`
+
+### Summary
+
+Implemented the biggest cost cut: consumed camera frames are deleted from server-side conversation history after each response (pending/in-flight/consumed tracker, tagged delete events, silenced prune races). Each frame now billed once instead of every turn (~10x image cost reduction in interval mode). Toggle + pruned counter in UI. 10 new unit tests. PR #4 (stacked on #3).
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `97442c9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

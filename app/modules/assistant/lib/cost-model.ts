@@ -10,6 +10,8 @@
  * snowball that history-pruning work is verified against.
  */
 
+import { isRecord } from "@/modules/assistant/lib/type-guards";
+
 export type UsageBuckets = {
   /** Total billed input tokens for the turn, cached portion included. */
   inputTokens: number;
@@ -73,10 +75,6 @@ export function createEmptyUsageReport(): UsageReport {
     lastTurn: null,
     estimatedCostUsd: 0,
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function getTokenCount(value: Record<string, unknown>, fieldName: string): number {
