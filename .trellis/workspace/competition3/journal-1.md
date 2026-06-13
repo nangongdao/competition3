@@ -337,3 +337,36 @@ Captured the repository-specific Git HTTPS failure escalation path in pr-workflo
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Response budgets
+
+**Date**: 2026-06-13
+**Task**: Response budgets
+**Branch**: `feat/response-budgets`
+
+### Summary
+
+Implemented Realtime response budget presets, text-only response mode, cost-policy display, tests, and updated roadmap/design/spec contracts.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ddf9ac4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
