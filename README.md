@@ -145,3 +145,7 @@ This project is implemented for the contest from this repository's `task.md`. La
 
 See [`docs/design.md`](docs/design.md) for planned vs implemented user stories,
 architecture notes, and cost-control decisions.
+
+See [`docs/roadmap.md`](docs/roadmap.md) for the development roadmap: the
+realtime cost model, shipped increments, and planned features with their
+implementation methods.

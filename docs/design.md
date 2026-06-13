@@ -1,5 +1,8 @@
 # AI Visual Dialogue Assistant Design
 
+> Roadmap companion: see [`roadmap.md`](roadmap.md) for the development
+> sequence, planned increments, and their implementation methods.
+
 ## Product Goal
 
 Build a browser assistant that can use live camera context, microphone input, and

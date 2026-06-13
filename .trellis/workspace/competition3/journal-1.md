@@ -205,3 +205,36 @@ Implemented the biggest cost cut: consumed camera frames are deleted from server
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: Document development roadmap
+
+**Date**: 2026-06-13
+**Task**: Document development roadmap
+**Branch**: `docs/development-roadmap`
+
+### Summary
+
+Persisted the cost-control development plan into docs/roadmap.md: cost model rationale, shipped PR1-PR4 status, planned increments with concrete methods (frame-diff sampling, push-to-talk, response budgets, idle auto-disconnect, measurement backfill), candidates, and sequencing rules. README/design.md linked. PR #5 (stacked on #4). Development paused per user request.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b576e2b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
