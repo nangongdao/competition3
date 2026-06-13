@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/components.md", "reason": "Composer UI must follow component patterns"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "New hook callback and event types must follow TS conventions"}
+{"file": ".trellis/spec/frontend/quality.md", "reason": "Lint/typecheck/build gates for frontend changes"}
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "Shared code quality rules"}
+{"file": ".trellis/spec/shared/pr-workflow.md", "reason": "Branch/PR delivery requirements for this competition repo"}
