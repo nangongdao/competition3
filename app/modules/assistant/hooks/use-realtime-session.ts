@@ -39,8 +39,20 @@ const DEFAULT_REALTIME_MODEL = "gpt-realtime";
 const DEFAULT_TURN_DETECTION_MODE: RealtimeTurnDetectionMode = "server-vad";
 const DATA_CHANNEL_LABEL = "oai-events";
 const DATA_CHANNEL_OPEN_TIMEOUT_MS = 15_000;
+export const REALTIME_IDLE_WARNING_MS = 90_000;
+export const REALTIME_IDLE_DISCONNECT_MS = 120_000;
+export const REALTIME_IDLE_CHECK_INTERVAL_MS = 30_000;
 
 export type RealtimeResponseMode = "audio-text" | "text-only";
+export type RealtimeIdleDecision = "none" | "warn" | "disconnect";
+
+type RealtimeIdleDecisionInput = {
+  now: number;
+  lastActivityAt: number;
+  hasWarned: boolean;
+  warningMs?: number;
+  disconnectMs?: number;
+};
 
 type StartRealtimeSessionInput = {
   visualContextMode: RealtimeCostPolicy["visualContextMode"];
@@ -331,6 +343,26 @@ function shouldEnableMicrophoneTrack(
   return turnDetectionMode === "server-vad" || isPushToTalkActive;
 }
 
+export function getRealtimeIdleDecision({
+  now,
+  lastActivityAt,
+  hasWarned,
+  warningMs = REALTIME_IDLE_WARNING_MS,
+  disconnectMs = REALTIME_IDLE_DISCONNECT_MS,
+}: RealtimeIdleDecisionInput): RealtimeIdleDecision {
+  const idleForMs = Math.max(0, now - lastActivityAt);
+
+  if (idleForMs >= disconnectMs) {
+    return "disconnect";
+  }
+
+  if (idleForMs >= warningMs && !hasWarned) {
+    return "warn";
+  }
+
+  return "none";
+}
+
 function buildConversationEvent(
   input: SendVisualContextInput,
 ): RealtimeConversationItemCreateEvent {
@@ -409,6 +441,9 @@ export function useRealtimeSession({
   const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const sessionTimerIdRef = useRef<number | null>(null);
+  const idleTimerIdRef = useRef<number | null>(null);
+  const lastActivityAtRef = useRef(Date.now());
+  const hasIdleWarningRef = useRef(false);
   const assistantTextBufferRef = useRef("");
   const turnDetectionModeRef = useRef<RealtimeTurnDetectionMode>(
     DEFAULT_TURN_DETECTION_MODE,
@@ -458,6 +493,18 @@ export function useRealtimeSession({
     }
   }, []);
 
+  const clearIdleTimer = useCallback((): void => {
+    if (idleTimerIdRef.current !== null) {
+      window.clearInterval(idleTimerIdRef.current);
+      idleTimerIdRef.current = null;
+    }
+  }, []);
+
+  const recordRealtimeActivity = useCallback((timestamp = Date.now()): void => {
+    lastActivityAtRef.current = timestamp;
+    hasIdleWarningRef.current = false;
+  }, []);
+
   const flushAssistantText = useCallback(
     (fallbackText: string | null): void => {
       const text = fallbackText ?? assistantTextBufferRef.current.trim();
@@ -473,6 +520,7 @@ export function useRealtimeSession({
   const closeConnection = useCallback(
     (nextStatus: RealtimeConnectionStatus): void => {
       clearSessionTimer();
+      clearIdleTimer();
       assistantTextBufferRef.current = "";
       isPushToTalkActiveRef.current = false;
       setIsPushToTalkActive(false);
@@ -509,7 +557,7 @@ export function useRealtimeSession({
         peerConnectionState: null,
       }));
     },
-    [clearSessionTimer],
+    [clearIdleTimer, clearSessionTimer],
   );
 
   const recordTurnUsage = useCallback(
@@ -599,11 +647,13 @@ export function useRealtimeSession({
       }
 
       if (eventType === "input_audio_buffer.speech_started") {
+        recordRealtimeActivity();
         onPhaseChange("listening");
         return;
       }
 
       if (eventType === "response.created") {
+        recordRealtimeActivity();
         pruneTrackerRef.current = beginResponse(pruneTrackerRef.current);
         onPhaseChange("thinking");
         return;
@@ -614,12 +664,14 @@ export function useRealtimeSession({
         eventType === "response.output_text.delta" ||
         eventType === "response.text.delta"
       ) {
+        recordRealtimeActivity();
         assistantTextBufferRef.current += getStringField(event, "delta") ?? "";
         onPhaseChange("responding");
         return;
       }
 
       if (eventType === "response.audio_transcript.done") {
+        recordRealtimeActivity();
         flushAssistantText(getStringField(event, "transcript"));
         onPhaseChange("listening");
         return;
@@ -629,6 +681,7 @@ export function useRealtimeSession({
         eventType === "response.output_text.done" ||
         eventType === "response.text.done"
       ) {
+        recordRealtimeActivity();
         flushAssistantText(getStringField(event, "text"));
         onPhaseChange("listening");
         return;
@@ -638,12 +691,14 @@ export function useRealtimeSession({
         const transcript = getStringField(event, "transcript");
 
         if (transcript !== null && transcript.trim().length > 0) {
+          recordRealtimeActivity();
           onTranscript("user", transcript);
         }
         return;
       }
 
       if (eventType === "response.done") {
+        recordRealtimeActivity();
         recordTurnUsage(event);
         pruneConsumedFrameItems();
         flushAssistantText(null);
@@ -655,6 +710,7 @@ export function useRealtimeSession({
       onPhaseChange,
       onTranscript,
       pruneConsumedFrameItems,
+      recordRealtimeActivity,
       recordTurnUsage,
     ],
   );
@@ -670,6 +726,49 @@ export function useRealtimeSession({
     },
     [clearSessionTimer, closeConnection, onPhaseChange, onTranscript],
   );
+
+  const startIdleMonitor = useCallback((): void => {
+    clearIdleTimer();
+    recordRealtimeActivity();
+    idleTimerIdRef.current = window.setInterval(() => {
+      const now = Date.now();
+
+      if (isPushToTalkActiveRef.current) {
+        recordRealtimeActivity(now);
+        return;
+      }
+
+      const decision = getRealtimeIdleDecision({
+        now,
+        lastActivityAt: lastActivityAtRef.current,
+        hasWarned: hasIdleWarningRef.current,
+      });
+
+      if (decision === "warn") {
+        hasIdleWarningRef.current = true;
+        onTranscript(
+          "system",
+          "No Realtime activity for 90 seconds. The session will close after 120 seconds idle.",
+        );
+        return;
+      }
+
+      if (decision === "disconnect") {
+        onTranscript(
+          "system",
+          "Realtime session closed after 120 seconds idle.",
+        );
+        onPhaseChange("ready");
+        closeConnection("idle");
+      }
+    }, REALTIME_IDLE_CHECK_INTERVAL_MS);
+  }, [
+    clearIdleTimer,
+    closeConnection,
+    onPhaseChange,
+    onTranscript,
+    recordRealtimeActivity,
+  ]);
 
   const startSession = useCallback(
     async (input: StartRealtimeSessionInput): Promise<boolean> => {
@@ -829,6 +928,7 @@ export function useRealtimeSession({
         });
         await waitForDataChannelOpen(dataChannel);
         scheduleSessionLimit(sessionResponse.costPolicy.maxSessionSeconds);
+        startIdleMonitor();
 
         setRealtimeState({
           status: "connected",
@@ -859,6 +959,7 @@ export function useRealtimeSession({
       onPhaseChange,
       onTranscript,
       scheduleSessionLimit,
+      startIdleMonitor,
       stream,
     ],
   );
@@ -881,6 +982,7 @@ export function useRealtimeSession({
 
       const conversationEvent = buildConversationEvent(input);
       dataChannel.send(JSON.stringify(conversationEvent));
+      recordRealtimeActivity();
 
       if (input.requestResponse) {
         dataChannel.send(
@@ -891,7 +993,7 @@ export function useRealtimeSession({
 
       return true;
     },
-    [onPhaseChange],
+    [onPhaseChange, recordRealtimeActivity],
   );
 
   const sendTextMessage = useCallback(
@@ -912,11 +1014,12 @@ export function useRealtimeSession({
       dataChannel.send(
         JSON.stringify(buildResponseCreateEvent(responseModeRef.current)),
       );
+      recordRealtimeActivity();
       onPhaseChange("thinking");
 
       return true;
     },
-    [onPhaseChange],
+    [onPhaseChange, recordRealtimeActivity],
   );
 
   const startPushToTalk = useCallback((): boolean => {
@@ -934,10 +1037,16 @@ export function useRealtimeSession({
 
     isPushToTalkActiveRef.current = true;
     setIsPushToTalkActive(true);
+    recordRealtimeActivity();
     applyMicrophoneTrackState();
     onPhaseChange("listening");
     return true;
-  }, [applyMicrophoneTrackState, onPhaseChange, realtimeState.status]);
+  }, [
+    applyMicrophoneTrackState,
+    onPhaseChange,
+    realtimeState.status,
+    recordRealtimeActivity,
+  ]);
 
   const stopPushToTalk = useCallback((): boolean => {
     if (
@@ -965,10 +1074,11 @@ export function useRealtimeSession({
     dataChannel.send(
       JSON.stringify(buildResponseCreateEvent(responseModeRef.current)),
     );
+    recordRealtimeActivity();
     onPhaseChange("thinking");
 
     return true;
-  }, [applyMicrophoneTrackState, onPhaseChange]);
+  }, [applyMicrophoneTrackState, onPhaseChange, recordRealtimeActivity]);
 
   useEffect(() => {
     return () => {
