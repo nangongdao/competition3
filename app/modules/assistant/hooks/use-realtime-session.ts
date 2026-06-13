@@ -7,6 +7,20 @@ import {
   parseResponseUsage,
   type UsageReport,
 } from "@/modules/assistant/lib/cost-model";
+import {
+  beginResponse,
+  buildFramePruneEvent,
+  completeResponse,
+  createFramePruneTracker,
+  getCreatedImageItemId,
+  isFramePruneError,
+  trackCreatedFrame,
+  type FramePruneTracker,
+} from "@/modules/assistant/lib/frame-pruning";
+import {
+  getStringField,
+  isRecord,
+} from "@/modules/assistant/lib/type-guards";
 import type {
   AssistantPhase,
   RealtimeConnectionStatus,
@@ -45,12 +59,15 @@ type UseRealtimeSessionOptions = {
   stream: MediaStream | null;
   onTranscript: (speaker: TranscriptSpeaker, text: string) => void;
   onPhaseChange: (phase: AssistantPhase) => void;
+  /** When true, consumed image frames are deleted from server history. */
+  pruneConsumedFrames: boolean;
 };
 
 type UseRealtimeSessionResult = {
   realtimeState: RealtimeSessionState;
   remoteStream: MediaStream | null;
   usageReport: UsageReport;
+  prunedFrameCount: number;
   startSession: (input: StartRealtimeSessionInput) => Promise<boolean>;
   stopSession: () => void;
   sendVisualContext: (input: SendVisualContextInput) => boolean;
@@ -88,18 +105,6 @@ const initialRealtimeState: RealtimeSessionState = {
   costPolicy: null,
   peerConnectionState: null,
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function getStringField(
-  value: Record<string, unknown>,
-  fieldName: string,
-): string | null {
-  const fieldValue = value[fieldName];
-  return typeof fieldValue === "string" ? fieldValue : null;
-}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -332,6 +337,7 @@ export function useRealtimeSession({
   stream,
   onTranscript,
   onPhaseChange,
+  pruneConsumedFrames,
 }: UseRealtimeSessionOptions): UseRealtimeSessionResult {
   const [realtimeState, setRealtimeState] =
     useState<RealtimeSessionState>(initialRealtimeState);
@@ -339,11 +345,16 @@ export function useRealtimeSession({
   const [usageReport, setUsageReport] = useState<UsageReport>(
     createEmptyUsageReport,
   );
+  const [prunedFrameCount, setPrunedFrameCount] = useState(0);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const sessionTimerIdRef = useRef<number | null>(null);
   const assistantTextBufferRef = useRef("");
+  const pruneTrackerRef = useRef<FramePruneTracker>(createFramePruneTracker());
+  const pruneSequenceRef = useRef(0);
+  const pruneConsumedFramesRef = useRef(pruneConsumedFrames);
+  pruneConsumedFramesRef.current = pruneConsumedFrames;
 
   const clearSessionTimer = useCallback((): void => {
     if (sessionTimerIdRef.current !== null) {
@@ -419,6 +430,31 @@ export function useRealtimeSession({
     [],
   );
 
+  const pruneConsumedFrameItems = useCallback((): void => {
+    const { tracker, consumedItemIds } = completeResponse(
+      pruneTrackerRef.current,
+    );
+    pruneTrackerRef.current = tracker;
+
+    if (consumedItemIds.length === 0 || !pruneConsumedFramesRef.current) {
+      return;
+    }
+
+    const dataChannel = dataChannelRef.current;
+
+    if (dataChannel === null || dataChannel.readyState !== "open") {
+      return;
+    }
+
+    consumedItemIds.forEach((itemId) => {
+      pruneSequenceRef.current += 1;
+      dataChannel.send(
+        JSON.stringify(buildFramePruneEvent(itemId, pruneSequenceRef.current)),
+      );
+    });
+    setPrunedFrameCount((current) => current + consumedItemIds.length);
+  }, []);
+
   const handleServerEvent = useCallback(
     (event: Record<string, unknown>): void => {
       const eventType = getStringField(event, "type");
@@ -428,6 +464,13 @@ export function useRealtimeSession({
       }
 
       if (eventType === "error") {
+        if (isFramePruneError(event)) {
+          // Our own conversation.item.delete raced an already-removed
+          // item; harmless for the session, so keep the conversation
+          // healthy instead of surfacing an error state.
+          return;
+        }
+
         const message = getServerEventErrorMessage(event);
         setRealtimeState((current) => ({
           ...current,
@@ -439,12 +482,25 @@ export function useRealtimeSession({
         return;
       }
 
+      if (eventType === "conversation.item.created") {
+        const imageItemId = getCreatedImageItemId(event);
+
+        if (imageItemId !== null) {
+          pruneTrackerRef.current = trackCreatedFrame(
+            pruneTrackerRef.current,
+            imageItemId,
+          );
+        }
+        return;
+      }
+
       if (eventType === "input_audio_buffer.speech_started") {
         onPhaseChange("listening");
         return;
       }
 
       if (eventType === "response.created") {
+        pruneTrackerRef.current = beginResponse(pruneTrackerRef.current);
         onPhaseChange("thinking");
         return;
       }
@@ -485,11 +541,18 @@ export function useRealtimeSession({
 
       if (eventType === "response.done") {
         recordTurnUsage(event);
+        pruneConsumedFrameItems();
         flushAssistantText(null);
         onPhaseChange("listening");
       }
     },
-    [flushAssistantText, onPhaseChange, onTranscript, recordTurnUsage],
+    [
+      flushAssistantText,
+      onPhaseChange,
+      onTranscript,
+      pruneConsumedFrameItems,
+      recordTurnUsage,
+    ],
   );
 
   const scheduleSessionLimit = useCallback(
@@ -549,6 +612,9 @@ export function useRealtimeSession({
 
       closeConnection("idle");
       setUsageReport(createEmptyUsageReport());
+      setPrunedFrameCount(0);
+      pruneTrackerRef.current = createFramePruneTracker();
+      pruneSequenceRef.current = 0;
       setRealtimeState({
         status: "creating-session",
         costPolicy: null,
@@ -762,6 +828,7 @@ export function useRealtimeSession({
     realtimeState,
     remoteStream,
     usageReport,
+    prunedFrameCount,
     startSession,
     stopSession,
     sendVisualContext,

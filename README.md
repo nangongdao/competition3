@@ -21,6 +21,8 @@ boundary in place:
 * Text message composer for typed questions during a Realtime session
 * Per-session usage meter built from Realtime `response.done` usage events,
   with modality buckets and an estimated cost
+* Conversation history pruning that deletes consumed camera frames so they
+  are billed once instead of on every later turn
 * ESLint, typecheck, build, and preview scripts
 * Dependency and environment documentation
 
