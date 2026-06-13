@@ -22,6 +22,12 @@ import {
   formatTokens,
   formatUsd,
 } from "@/modules/assistant/lib/cost-model";
+import {
+  createFrameSignatureFromImageData,
+  FRAME_DIFF_SEND_THRESHOLD,
+  shouldSendFrame,
+  type FrameSignature,
+} from "@/modules/assistant/lib/frame-diff";
 import type {
   AssistantPhase,
   CostControlSetting,
@@ -102,6 +108,11 @@ function isActiveSession(phase: AssistantPhase): boolean {
   );
 }
 
+type CapturedFrame = {
+  frameDataUrl: string;
+  signature: FrameSignature;
+};
+
 export function AssistantWorkspace(): React.JSX.Element {
   const { mediaState, requestAccess, stopAccess, stream } = useMediaCapture();
   const [assistantPhase, setAssistantPhase] = useState<AssistantPhase>("idle");
@@ -110,6 +121,8 @@ export function AssistantWorkspace(): React.JSX.Element {
   );
   const [lastFrameDataUrl, setLastFrameDataUrl] = useState<string | null>(null);
   const [sampledFrameCount, setSampledFrameCount] = useState(0);
+  const [sentFrameCount, setSentFrameCount] = useState(0);
+  const [skippedAutoFrameCount, setSkippedAutoFrameCount] = useState(0);
   const [isAutoSampling, setIsAutoSampling] = useState(false);
   const [samplingIntervalSeconds, setSamplingIntervalSeconds] = useState(8);
   const [isFramePruningEnabled, setIsFramePruningEnabled] = useState(true);
@@ -118,6 +131,7 @@ export function AssistantWorkspace(): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastUploadedFrameSignatureRef = useRef<FrameSignature | null>(null);
 
   const hasMedia = mediaState.status === "granted" && stream !== null;
   const hasActiveSession = isActiveSession(assistantPhase);
@@ -181,10 +195,15 @@ export function AssistantWorkspace(): React.JSX.Element {
       value: "server",
       detail: "Permanent model keys stay in the Worker.",
     },
+    {
+      label: "Auto diff",
+      value: `${Math.round(FRAME_DIFF_SEND_THRESHOLD * 100)}%`,
+      detail: "Interval uploads skip frames below this luma change.",
+    },
   ] as const;
 
   const captureFrame = useCallback(
-    (source: "manual" | "auto"): string | null => {
+    (source: "manual" | "auto"): CapturedFrame | null => {
       const videoElement = videoRef.current;
       const canvasElement = canvasRef.current;
 
@@ -218,6 +237,23 @@ export function AssistantWorkspace(): React.JSX.Element {
       }
 
       context.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+      let signature: FrameSignature;
+
+      try {
+        signature = createFrameSignatureFromImageData(
+          context.getImageData(0, 0, canvasElement.width, canvasElement.height),
+        );
+      } catch {
+        if (source === "manual") {
+          addTranscript(
+            "system",
+            "The browser could not analyze the current camera frame.",
+          );
+        }
+
+        return null;
+      }
+
       const frameDataUrl = canvasElement.toDataURL("image/jpeg", 0.72);
       setLastFrameDataUrl(frameDataUrl);
       setSampledFrameCount((currentCount) => currentCount + 1);
@@ -226,10 +262,18 @@ export function AssistantWorkspace(): React.JSX.Element {
         addTranscript("system", "Sampled one visual context frame.");
       }
 
-      return frameDataUrl;
+      return {
+        frameDataUrl,
+        signature,
+      };
     },
     [addTranscript, hasMedia],
   );
+
+  const recordUploadedFrame = useCallback((signature: FrameSignature): void => {
+    lastUploadedFrameSignatureRef.current = signature;
+    setSentFrameCount((currentCount) => currentCount + 1);
+  }, []);
 
   const stopSession = useCallback((): void => {
     const shouldLogStop = hasActiveSession || hasRealtimeConnection;
@@ -300,20 +344,37 @@ export function AssistantWorkspace(): React.JSX.Element {
   }, [mediaState.status]);
 
   useEffect(() => {
-    if (!isAutoSampling || !hasActiveSession || !hasMedia) {
+    if (!isAutoSampling || !hasActiveSession || !hasMedia || !hasRealtimeConnection) {
       return;
     }
 
     const timerId = window.setInterval(() => {
-      const frameDataUrl = captureFrame("auto");
+      const capturedFrame = captureFrame("auto");
 
-      if (frameDataUrl !== null && hasRealtimeConnection) {
-        sendVisualContext({
-          frameDataUrl,
-          prompt:
-            "Background visual context refresh. Use this sampled camera frame as context for the next answer, but do not respond yet.",
-          requestResponse: false,
-        });
+      if (capturedFrame === null) {
+        return;
+      }
+
+      if (
+        !shouldSendFrame(
+          lastUploadedFrameSignatureRef.current,
+          capturedFrame.signature,
+          FRAME_DIFF_SEND_THRESHOLD,
+        )
+      ) {
+        setSkippedAutoFrameCount((currentCount) => currentCount + 1);
+        return;
+      }
+
+      const sent = sendVisualContext({
+        frameDataUrl: capturedFrame.frameDataUrl,
+        prompt:
+          "Background visual context refresh. Use this sampled camera frame as context for the next answer, but do not respond yet.",
+        requestResponse: false,
+      });
+
+      if (sent) {
+        recordUploadedFrame(capturedFrame.signature);
       }
     }, samplingIntervalSeconds * 1000);
 
@@ -326,6 +387,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     hasMedia,
     hasRealtimeConnection,
     isAutoSampling,
+    recordUploadedFrame,
     sendVisualContext,
     samplingIntervalSeconds,
   ]);
@@ -339,6 +401,9 @@ export function AssistantWorkspace(): React.JSX.Element {
     stopAccess();
     setIsAutoSampling(false);
     setLastFrameDataUrl(null);
+    lastUploadedFrameSignatureRef.current = null;
+    setSentFrameCount(0);
+    setSkippedAutoFrameCount(0);
     addTranscript("system", "Camera and microphone tracks were released.");
   };
 
@@ -350,6 +415,9 @@ export function AssistantWorkspace(): React.JSX.Element {
     }
 
     addTranscript("system", "Creating a key-safe Realtime session.");
+    lastUploadedFrameSignatureRef.current = null;
+    setSentFrameCount(0);
+    setSkippedAutoFrameCount(0);
     void startRealtimeSession({
       visualContextMode: isAutoSampling ? "interval" : "manual",
       instructions:
@@ -362,9 +430,9 @@ export function AssistantWorkspace(): React.JSX.Element {
       return;
     }
 
-    const frameDataUrl = captureFrame("manual");
+    const capturedFrame = captureFrame("manual");
 
-    if (frameDataUrl === null) {
+    if (capturedFrame === null) {
       return;
     }
 
@@ -372,12 +440,13 @@ export function AssistantWorkspace(): React.JSX.Element {
     addTranscript("user", prompt);
 
     const sent = sendVisualContext({
-      frameDataUrl,
+      frameDataUrl: capturedFrame.frameDataUrl,
       prompt,
       requestResponse: true,
     });
 
     if (sent) {
+      recordUploadedFrame(capturedFrame.signature);
       addTranscript("system", "Sent one sampled frame to the Realtime model.");
       return;
     }
@@ -387,17 +456,18 @@ export function AssistantWorkspace(): React.JSX.Element {
   };
 
   const handleManualFrameCapture = (): void => {
-    const frameDataUrl = captureFrame("manual");
+    const capturedFrame = captureFrame("manual");
 
-    if (frameDataUrl !== null && hasRealtimeConnection) {
+    if (capturedFrame !== null && hasRealtimeConnection) {
       const sent = sendVisualContext({
-        frameDataUrl,
+        frameDataUrl: capturedFrame.frameDataUrl,
         prompt:
           "Use this sampled camera frame as visual context for the next answer. Do not respond yet.",
         requestResponse: false,
       });
 
       if (sent) {
+        recordUploadedFrame(capturedFrame.signature);
         addTranscript("system", "Sent sampled frame as Realtime visual context.");
       }
     }
@@ -756,8 +826,16 @@ export function AssistantWorkspace(): React.JSX.Element {
 
           <dl className="frame-stats">
             <div>
-              <dt>Frames</dt>
+              <dt>Sampled</dt>
               <dd>{sampledFrameCount}</dd>
+            </div>
+            <div>
+              <dt>Sent</dt>
+              <dd>{sentFrameCount}</dd>
+            </div>
+            <div>
+              <dt>Skipped</dt>
+              <dd>{skippedAutoFrameCount}</dd>
             </div>
             <div>
               <dt>Pruned</dt>

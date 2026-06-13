@@ -709,6 +709,74 @@ const sessionResponse = await fetch("/api/realtime/session", {
 // Use only the short-lived session.client_secret.value for WebRTC SDP.
 ```
 
+## Scenario: Visual Frame Sampling Cost Gate
+
+### 1. Scope / Trigger
+
+- Trigger: changing browser camera frame sampling, automatic visual context
+  uploads, or helper modules under `app/modules/assistant/lib/` that decide
+  whether to send a sampled frame.
+- Goal: prevent automatic interval sampling from uploading visually redundant
+  frames while preserving deterministic manual frame actions.
+
+### 2. Signatures
+
+```typescript
+export type FrameSignature = {
+  width: number;
+  height: number;
+  luma: readonly number[];
+};
+
+export function createFrameSignatureFromImageData(
+  imageData: FrameImageData,
+  options?: { width?: number; height?: number },
+): FrameSignature;
+
+export function frameDifferenceRatio(
+  previous: FrameSignature,
+  next: FrameSignature,
+): number;
+
+export function shouldSendFrame(
+  previous: FrameSignature | null,
+  next: FrameSignature,
+  threshold?: number,
+): boolean;
+```
+
+### 3. Contracts
+
+- Keep the default grid small (`32x18`) so the browser-side comparison is cheap
+  enough to run on every interval sample.
+- Keep the default send threshold at `0.04` unless measurement data justifies a
+  different value.
+- Automatic interval sampling compares the candidate frame signature with the
+  last successfully uploaded frame signature.
+- Only update the last uploaded signature after `sendVisualContext` returns
+  `true`.
+- Manual `Sample frame` and `Ask with frame` actions must bypass the difference
+  gate and attempt to send the current frame whenever media/session state allows
+  it.
+- Low-change automatic frames may update local preview/capture counters, but
+  must not send a Realtime `conversation.item.create` event.
+
+### 4. Good/Base/Bad Cases
+
+- Good: a static scene under interval sampling increments the skipped counter
+  and keeps image-input token growth flat.
+- Base: the first automatic frame in a session sends because no previous
+  uploaded signature exists.
+- Bad: manual `Ask with frame` is blocked because the frame is visually similar
+  to the last automatic upload.
+
+### 5. Tests Required
+
+- Identical signatures produce a `0` difference ratio.
+- Small synthetic luma noise below the threshold is skipped.
+- Synthetic scene changes above the threshold are sent.
+- Incompatible signatures are treated as a send-worthy change.
+
 ---
 
 ## Summary

@@ -238,3 +238,36 @@ Persisted the cost-control development plan into docs/roadmap.md: cost model rat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: Frame difference sampling
+
+**Date**: 2026-06-13
+**Task**: Frame difference sampling
+**Branch**: `feat/frame-difference-sampling`
+
+### Summary
+
+Implemented frame-difference gating for automatic visual context sampling, updated counters/docs/specs, verified lint/typecheck/build/test, and opened PR #6 via GitHub API fallback after Git HTTPS push failed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `336de22` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
