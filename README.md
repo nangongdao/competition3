@@ -25,6 +25,8 @@ boundary in place:
   counters to show static-scene upload savings
 * Sampled frame delivery through the Realtime data channel
 * Text message composer for typed questions during a Realtime session
+* Browser speech dictation and optional spoken answer playback for Chat
+  Completions mode when the browser supports Web Speech APIs
 * Per-session usage meter built from Realtime `response.done` usage events,
   with modality buckets and an estimated cost
 * Conversation history pruning that deletes consumed camera frames so they
@@ -287,9 +289,12 @@ must support:
   `type: "image_url"` and a `data:image/...` URL. Text-only chat models can
   still answer typed questions, but they cannot understand the sampled frame.
 
-Chat mode does not stream microphone audio and does not generate voice output.
-If you need voice in Chat mode, the provider must also expose separate STT/TTS
-APIs or the app needs a future browser speech adapter.
+Chat mode does not stream raw microphone audio to the model and does not ask
+the provider to generate audio tokens. Instead, supported browsers can use the
+Web Speech APIs as a local adapter: speech recognition fills the existing text
+composer, and speech synthesis can read returned text answers aloud. Browser
+support and recognition quality depend on the user's browser/OS; use Realtime
+mode when you need true low-latency model audio.
 
 ### Realtime mode
 

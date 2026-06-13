@@ -611,6 +611,8 @@ When the session changes (login/logout), invalidate all user-scoped caches:
 
 - Provider config hook: `app/modules/assistant/hooks/use-provider-config.ts`
 - Chat mutation hook: `app/modules/assistant/hooks/use-chat-completion.ts`
+- Browser speech adapter hook:
+  `app/modules/assistant/hooks/use-browser-speech-adapter.ts`
 - Config API: `GET /api/provider/config`
 - Completion API: `POST /api/chat/completion`
 
@@ -622,6 +624,14 @@ type SendChatCompletionInput = {
   imageDataUrl?: string;
   responseBudget: "brief" | "standard" | "detailed";
   instructions?: string;
+};
+
+type BrowserSpeechAdapterState = {
+  isRecognitionSupported: boolean;
+  isSynthesisSupported: boolean;
+  recognitionStatus: "unsupported" | "idle" | "listening" | "error";
+  recognitionError?: string;
+  isSpeaking: boolean;
 };
 ```
 
@@ -637,8 +647,17 @@ type SendChatCompletionInput = {
 - Typed messages in Chat mode call `/api/chat/completion` directly.
 - Visual questions in Chat mode capture one JPEG frame and send it as
   `imageDataUrl` with the user message.
-- Chat mode does not stream microphone audio and does not produce assistant
-  audio unless a future STT/TTS adapter is added.
+- Chat mode may use browser Web Speech APIs as a progressive enhancement:
+  speech recognition fills the existing text composer, and speech synthesis
+  reads returned text answers locally.
+- Chat-mode speech recognition must not send raw microphone audio to the
+  Worker, provider, or Chat Completions model.
+- Chat-mode speech synthesis must not be represented as provider audio output;
+  it reads the text answer already returned by `/api/chat/completion`.
+- Browser speech controls must be feature-detected and show disabled or
+  explanatory states when unsupported.
+- Switching from Chat mode to Realtime should stop active browser dictation and
+  cancel browser speech synthesis so Realtime owns microphone/audio behavior.
 
 ### 4. Validation & Error Matrix
 
@@ -650,23 +669,59 @@ type SendChatCompletionInput = {
 | Chat success | Append assistant text to the transcript and return to ready/idle. |
 | Chat failure | Move to error phase and keep media preview usable. |
 | User switches from Realtime to Chat while connected | Stop the Realtime connection before switching modes. |
+| Browser speech recognition unsupported | Disable Chat voice input or show an explanatory unsupported state. |
+| Browser speech recognition fails | Surface a localized status/error message and keep typed Chat input usable. |
+| Browser speech synthesis unsupported | Disable Chat answer auto-read without blocking text answers. |
+| User switches from Chat to Realtime while dictating or speaking | Stop dictation and cancel browser speech synthesis before switching modes. |
 
 ### 5. Good/Base/Bad Cases
 
 - Good: user opens the app with `OPENAI_PROVIDER_MODE=chat`, grants media, and
   asks a camera-frame question without starting a Realtime session.
+- Good: supported browser dictation fills the existing Chat text composer; the
+  user sends the recognized text through the normal Chat request path.
+- Good: optional Chat answer reading uses browser `speechSynthesis` after the
+  text answer has been appended to the transcript.
 - Base: user sends typed text with no media permission; Chat mode still works
   for text-only providers.
 - Bad: Chat mode prompts the user to start a Realtime session before sending
   text.
-- Bad: Chat mode tries to use microphone audio without an STT adapter.
+- Bad: Chat mode streams raw microphone audio to the Worker or model under the
+  Chat Completions route.
+- Bad: browser speech synthesis is counted or displayed as model-generated
+  audio output tokens.
 
 ### 6. Tests Required
 
 - Worker route tests cover the API contract; frontend typecheck must verify the
   hooks consume backend response types through type-only imports.
+- Browser speech adapter helpers should have unit tests for support detection,
+  final transcript extraction, and localized recognition error mapping.
 - Manual browser smoke test should cover mode switching, text submit in Chat
-  mode, and one visual question with media permission.
+  mode, one visual question with media permission, browser dictation where
+  supported, and answer auto-read where supported.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```typescript
+// Sends raw microphone audio through a Chat Completions path.
+await fetch("/api/chat/completion", {
+  method: "POST",
+  body: JSON.stringify({ audioBlob }),
+});
+```
+
+Correct:
+
+```typescript
+// Browser speech recognition produces text; the existing Chat contract stays unchanged.
+await sendChatCompletion({
+  message: recognizedText,
+  responseBudget: "brief",
+});
+```
 
 ---
 

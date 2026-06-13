@@ -41,6 +41,7 @@ server side.
 | Create a key-safe AI session | Implemented | `POST /api/realtime/session` creates a server-side Realtime session when `OPENAI_API_KEY` is configured. Provider URLs can target OpenAI or a third-party Realtime-compatible API. |
 | Use third-party Chat Completions providers | Implemented | `POST /api/chat/completion` lets the browser send text and optional sampled frames through the Worker to an OpenAI-compatible Chat Completions provider. |
 | Pick the provider protocol | Implemented | `/api/provider/config` exposes the non-secret default mode, and the workspace can switch between Chat Completions compatibility and Realtime. |
+| Use voice-style interaction in Chat mode | Implemented | Supported browsers can use speech recognition to fill the Chat text composer and speech synthesis to read Chat answers aloud. |
 | Stream low-latency voice to the model | Implemented | The browser posts an SDP offer with the short-lived client secret and plays the remote audio stream. |
 | Avoid noisy-room voice false positives | Implemented | The session can run in push-to-talk mode, which disables server VAD and commits audio only after the user releases the hold control. |
 | Mute the microphone during a live session | Implemented | The workspace toggles the local audio track with `MediaStreamTrack.enabled` without renegotiating WebRTC. |
@@ -94,6 +95,12 @@ image in 5, text in 4, text out 16, cached in 0.4):
   and uses `OPENAI_CHAT_MODEL` for text plus optional `image_url` data URL
   requests. This is the broadest third-party provider path because it does not
   require Realtime/WebRTC support.
+* **Browser speech adapter for Chat mode (implemented)**: when the browser
+  supports Web Speech APIs, Chat mode can turn microphone speech into text
+  before sending the existing Chat request and can read returned text answers
+  through browser speech synthesis. This does not send raw microphone audio to
+  the Worker/model and does not create provider audio-output tokens; support
+  and quality depend on the local browser/OS.
 * **Compact default instructions (implemented)**: the Worker sends a short
   default Realtime instruction block.
 * **Local fallback (implemented)**: without `OPENAI_API_KEY`, the media
@@ -168,6 +175,8 @@ or CSV files with the PR notes so the table below can be audited.
   Worker API endpoint.
 * Chat Completions mode needs `OPENAI_CHAT_MODEL`; use a model that supports
   image input if testing camera-frame understanding.
+* Chat-mode speech input/playback depends on browser Web Speech API support and
+  is a progressive enhancement, not a provider-side STT/TTS guarantee.
 * The measurement table above still needs live Realtime runs from an environment
   with `OPENAI_API_KEY`; this local development environment did not expose the
   key.
