@@ -20,6 +20,8 @@ import {
 
 import { useMediaCapture } from "@/modules/assistant/hooks/use-media-capture";
 import {
+  REALTIME_IDLE_DISCONNECT_MS,
+  REALTIME_IDLE_WARNING_MS,
   type RealtimeResponseMode,
   useRealtimeSession,
 } from "@/modules/assistant/hooks/use-realtime-session";
@@ -272,6 +274,13 @@ export function AssistantWorkspace(): React.JSX.Element {
         ? `${Math.round(realtimeState.costPolicy.maxSessionSeconds / 60)} min`
         : "10 min",
       detail: "The browser closes long Realtime sessions automatically.",
+    },
+    {
+      label: "Idle close",
+      value: `${Math.round(REALTIME_IDLE_DISCONNECT_MS / 1000)}s`,
+      detail: `Warns after ${Math.round(
+        REALTIME_IDLE_WARNING_MS / 1000,
+      )}s without speech, text, frames, or responses.`,
     },
     {
       label: "Response cap",

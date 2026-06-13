@@ -54,6 +54,7 @@ useless input, then cap output, then write down the measured results.**
 | #6 | `feat/frame-difference-sampling` | Frame-difference sampling: downscaled luma diff skips low-change interval uploads, manual frame actions bypass the gate, sent/skipped counters show savings; 8 unit tests | open, stacked on #5 |
 | #7 | `feat/push-to-talk-microphone-mute` | Push-to-talk and microphone mute: session-level turn detection mode, PTT audio buffer commit, live `MediaStreamTrack.enabled` mute, Worker payload mapping tests | open, stacked on #6 |
 | pending | `feat/response-budgets` | Response budgets: Worker-enforced output token caps, brief-mode instruction, text-only `response.create` mode, cost-panel policy display, Worker/client tests | in progress |
+| pending | `feat/idle-auto-disconnect` | Idle auto-disconnect: activity-based warning and disconnect timers, transcript notices, cost-panel policy display, client helper tests | in progress |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission
@@ -140,7 +141,7 @@ future session can implement it without re-deriving the design.
   output-audio bucket drops in text-only mode; transcript still renders
   text responses.
 
-### 3.4 Idle auto-disconnect (planned)
+### 3.4 Idle auto-disconnect (in progress)
 
 *Cost lever: stop paying for forgotten-open sessions; smarter than the
 fixed 10-minute cap.*
@@ -155,6 +156,12 @@ fixed 10-minute cap.*
   interrupted, abandoned ones stop billing ~8 minutes sooner.
 * **Verification**: unit-test the idle decision function with synthetic
   timestamps; manual check that an active conversation never disconnects.
+* **Current implementation**: the browser tracks meaningful activity from
+  speech start, text sends, visual frame sends, push-to-talk commits, and
+  response completion/output events. A 30-second interval warns in the
+  transcript after 90 seconds idle and closes the Realtime connection after
+  120 seconds idle. The existing 10-minute hard cap remains unchanged, and the
+  cost panel shows the idle close policy.
 
 ### 3.5 Design-doc measurement backfill (planned — final cost PR)
 

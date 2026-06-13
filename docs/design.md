@@ -40,6 +40,7 @@ server side.
 | Type a text message during a session | Implemented | A composer in the dialogue board sends text-only conversation items over the data channel and requests a response. |
 | See real token usage and estimated cost per session | Implemented | The usage meter parses authoritative `response.done` usage events into modality buckets with a USD estimate. |
 | Cap response length and request text-only responses | Implemented | The session uses brief, standard, or detailed response budgets, and the workspace can request text-only `response.create` events to avoid assistant audio output. |
+| Close forgotten-open Realtime sessions | Implemented | The browser warns after sustained inactivity and closes the Realtime connection after 120 seconds idle while preserving the 10-minute hard cap. |
 | Stop paying for consumed camera frames on later turns | Implemented | Consumed frame items are deleted from the server-side conversation after each response, with a visible pruned counter and an opt-out toggle. |
 | Skip static interval frames | Implemented | Automatic sampling compares downscaled grayscale frame signatures and skips low-change uploads; manual frame actions bypass the gate. |
 | Package final contest demo | Planned | Final pass should include verification notes and PR descriptions. |
@@ -113,8 +114,11 @@ image in 5, text in 4, text out 16, cached in 0.4):
   active budget and token cap, and a live text-only toggle changes
   `response.create` to `modalities: ["text"]` so assistant responses can avoid
   audio output when the user wants the cheapest output path.
-* **Idle auto-disconnect (planned)**: close the session after a period with
-  no speech activity, instead of relying only on the fixed cap.
+* **Idle auto-disconnect (implemented)**: the browser tracks meaningful
+  activity from speech start, text sends, frame sends, push-to-talk commits,
+  and response completion/output events. It warns in the transcript after about
+  90 seconds idle and closes the Realtime connection after about 120 seconds
+  idle, while the 10-minute hard cap remains the outer bound.
 
 ## Current Gaps
 

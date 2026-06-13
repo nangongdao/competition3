@@ -655,6 +655,21 @@ type SendVisualContextInput = {
   `modalities: ["audio", "text"]`; `responseMode: "text-only"` sends
   `modalities: ["text"]`. This response mode must apply consistently to text
   messages, visual frame questions, and push-to-talk releases.
+- The browser must keep the 10-minute session hard cap and also run an
+  activity-based idle monitor after the Realtime data channel opens. Idle
+  policy constants live in `use-realtime-session.ts` and use Unix
+  milliseconds: warn after 90 seconds idle, disconnect after 120 seconds idle,
+  check every 30 seconds.
+- Meaningful Realtime activity must reset the idle warning/disconnect window.
+  At minimum this includes speech start, text sends, visual frame sends,
+  push-to-talk audio commits, and response completion. Assistant output events
+  may also refresh activity so long responses are not interrupted.
+- Idle warnings and disconnect notices should use transcript system messages,
+  matching the existing session lifecycle surface. Emit only one warning per
+  idle window; any later meaningful activity clears the warning state.
+- Idle timers must be cleared from every connection close path. Push-to-talk
+  hold state counts as ongoing activity so a long hold is not disconnected
+  before release.
 - Microphone mute uses `MediaStreamTrack.enabled = false` and must not require
   WebRTC renegotiation.
 - The browser receives assistant audio from `peerConnection.ontrack` and binds
@@ -679,6 +694,8 @@ type SendVisualContextInput = {
 | SDP exchange fails | Close partial peer connection and show the upstream error text/status. |
 | Data channel is not open | Do not send frames; return `false` from the send function. |
 | Push-to-talk is muted or not active | Keep the audio track disabled and do not commit an audio buffer. |
+| Idle warning threshold reached | Add a system transcript notice once, keep the connection open. |
+| Idle disconnect threshold reached | Add a system transcript notice, close data channel and peer connection, and return the UI to ready/idle state. |
 | Realtime server sends `error` event | Surface the message and move the UI to an error state. |
 
 ### 5. Good/Base/Bad Cases
@@ -686,6 +703,8 @@ type SendVisualContextInput = {
 - Good: user grants media, Worker returns a valid short-lived session,
   data channel opens, microphone audio streams, and a sampled JPEG frame is sent
   with a response request.
+- Good: an active conversation keeps resetting the idle activity timestamp and
+  never reaches the idle disconnect threshold.
 - Base: no `OPENAI_API_KEY` is configured; camera preview and frame sampling
   still work, while session start reports a 503 configuration error.
 - Bad: browser code calls OpenAI session creation with a permanent key or tries
@@ -693,6 +712,8 @@ type SendVisualContextInput = {
 - Bad: text-only mode is implemented by muting local playback while still
   sending `modalities: ["audio", "text"]`; that hides sound but does not reduce
   output-audio tokens.
+- Bad: idle monitoring uses a fixed countdown from session start; active users
+  would be disconnected even though the goal is abandoned-session cleanup.
 
 ### 6. Tests Required
 
@@ -704,6 +725,8 @@ type SendVisualContextInput = {
   `max_response_output_tokens` payload mapping.
 - Unit tests should cover response-create event construction for audio+text and
   text-only modalities.
+- Unit tests should cover idle decision behavior at warning/disconnect
+  thresholds, repeated-warning suppression, and clock edge cases.
 - Typecheck must verify the hook consumes backend response types through
   type-only imports.
 - Browser smoke/manual tests must cover camera/microphone permission prompts,
