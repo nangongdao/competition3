@@ -19,6 +19,8 @@ boundary in place:
 * Manual and low-frequency visual frame sampling controls
 * Sampled frame delivery through the Realtime data channel
 * Text message composer for typed questions during a Realtime session
+* Per-session usage meter built from Realtime `response.done` usage events,
+  with modality buckets and an estimated cost
 * ESLint, typecheck, build, and preview scripts
 * Dependency and environment documentation
 

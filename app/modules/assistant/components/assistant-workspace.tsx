@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Activity,
   Camera,
   CircleStop,
   Gauge,
@@ -17,6 +18,10 @@ import {
 
 import { useMediaCapture } from "@/modules/assistant/hooks/use-media-capture";
 import { useRealtimeSession } from "@/modules/assistant/hooks/use-realtime-session";
+import {
+  formatTokens,
+  formatUsd,
+} from "@/modules/assistant/lib/cost-model";
 import type {
   AssistantPhase,
   CostControlSetting,
@@ -141,6 +146,7 @@ export function AssistantWorkspace(): React.JSX.Element {
   const {
     realtimeState,
     remoteStream,
+    usageReport,
     startSession: startRealtimeSession,
     stopSession: stopRealtimeSession,
     sendVisualContext,
@@ -606,6 +612,65 @@ export function AssistantWorkspace(): React.JSX.Element {
               <strong>{samplingIntervalSeconds}s</strong>
             </label>
           </div>
+        </div>
+
+        <div className="usage-panel" aria-label="Realtime usage meter">
+          <div className="panel-heading">
+            <Activity size={18} aria-hidden="true" />
+            <span>Usage meter</span>
+          </div>
+
+          <dl className="usage-headline">
+            <div>
+              <dt>Turns</dt>
+              <dd>{usageReport.turnCount}</dd>
+            </div>
+            <div>
+              <dt>Est. cost</dt>
+              <dd>{formatUsd(usageReport.estimatedCostUsd)}</dd>
+            </div>
+            <div>
+              <dt>Last turn input</dt>
+              <dd>
+                {usageReport.lastTurn
+                  ? formatTokens(usageReport.lastTurn.inputTokens)
+                  : "-"}
+              </dd>
+            </div>
+          </dl>
+
+          <dl className="usage-breakdown">
+            <div>
+              <dt>Audio in</dt>
+              <dd>{formatTokens(usageReport.totals.inputAudioTokens)}</dd>
+            </div>
+            <div>
+              <dt>Image in</dt>
+              <dd>{formatTokens(usageReport.totals.inputImageTokens)}</dd>
+            </div>
+            <div>
+              <dt>Text in</dt>
+              <dd>{formatTokens(usageReport.totals.inputTextTokens)}</dd>
+            </div>
+            <div>
+              <dt>Cached in</dt>
+              <dd>{formatTokens(usageReport.totals.cachedInputTokens)}</dd>
+            </div>
+            <div>
+              <dt>Audio out</dt>
+              <dd>{formatTokens(usageReport.totals.outputAudioTokens)}</dd>
+            </div>
+            <div>
+              <dt>Text out</dt>
+              <dd>{formatTokens(usageReport.totals.outputTextTokens)}</dd>
+            </div>
+          </dl>
+
+          <p className="usage-note">
+            Token usage is reported by the Realtime API per response. Each turn
+            re-bills the conversation history as input, so a growing last-turn
+            input means context is snowballing. Cost is an estimate.
+          </p>
         </div>
       </section>
 

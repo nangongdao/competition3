@@ -33,20 +33,56 @@ server side.
 | Stream low-latency voice to the model | Implemented | The browser posts an SDP offer with the short-lived client secret and plays the remote audio stream. |
 | Send sampled frames into model context | Implemented | Manual and interval samples are sent as `conversation.item.create` data-channel events. |
 | Type a text message during a session | Implemented | A composer in the dialogue board sends text-only conversation items over the data channel and requests a response. |
+| See real token usage and estimated cost per session | Implemented | The usage meter parses authoritative `response.done` usage events into modality buckets with a USD estimate. |
 | Package final contest demo | Planned | Final pass should include verification notes and PR descriptions. |
 
 ## Cost Controls
 
-* No continuous raw video upload: the app samples frames manually or at a
-  conservative interval.
-* Session duration policy: the backend returns a 10-minute intended cap in the
-  session cost policy and the browser closes the Realtime connection when that
-  cap is reached.
-* Key safety: permanent OpenAI API keys stay in Worker environment variables.
-* Compact default instructions: the Worker sends a short default Realtime
-  instruction block.
-* Local fallback: without `OPENAI_API_KEY`, the media workspace remains
-  runnable and session start reports a configuration error.
+### Cost model
+
+Realtime pricing has three structural properties that drive every decision
+below (USD per 1M tokens, gpt-realtime estimates: audio in 32, audio out 64,
+image in 5, text in 4, text out 16, cached in 0.4):
+
+1. **Audio output is the most expensive bucket** (4x text output).
+2. **Every `response.create` re-bills the whole conversation history as
+   input.** Context left in the conversation costs money on every later turn,
+   not once. A sampled 640px frame is roughly 500-800 image tokens; at one
+   frame per 8 seconds a 10-minute session accumulates ~45k image tokens that
+   would otherwise be re-billed every turn.
+3. **Idle time is not free** while the session stays open and VAD keeps
+   detecting speech-like input.
+
+### Measures
+
+* **Usage meter (implemented)**: the app parses the `usage` block of every
+  `response.done` event into audio/text/image x input/cached/output buckets,
+  accumulates session totals, and shows an estimated USD cost plus the
+  last-turn input size. The last-turn input number makes the history snowball
+  visible and is the baseline metric for the optimizations below.
+* **No continuous raw video upload (implemented)**: the app samples frames
+  manually or at a conservative interval.
+* **Session duration policy (implemented)**: the backend returns a 10-minute
+  intended cap in the session cost policy and the browser closes the Realtime
+  connection when that cap is reached.
+* **Key safety (implemented)**: permanent OpenAI API keys stay in Worker
+  environment variables.
+* **Compact default instructions (implemented)**: the Worker sends a short
+  default Realtime instruction block.
+* **Local fallback (implemented)**: without `OPENAI_API_KEY`, the media
+  workspace remains runnable and session start reports a configuration error.
+* **Conversation history pruning (planned)**: delete consumed image frames
+  from the server-side conversation via `conversation.item.delete` so each
+  frame is billed once instead of on every later turn.
+* **Frame-difference sampling (planned)**: client-side downscaled grayscale
+  diff between consecutive samples; skip upload when the scene has not
+  changed.
+* **Push-to-talk mode (planned)**: disable server VAD and commit the audio
+  buffer manually so noisy environments cannot trigger billable false turns.
+* **Response budget (planned)**: `max_response_output_tokens` presets and an
+  optional text-only response mode (audio out is 4x text out).
+* **Idle auto-disconnect (planned)**: close the session after a period with
+  no speech activity, instead of relying only on the fixed cap.
 
 ## Current Gaps
 
