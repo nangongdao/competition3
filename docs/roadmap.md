@@ -56,6 +56,7 @@ useless input, then cap output, then write down the measured results.**
 | pending | `feat/response-budgets` | Response budgets: Worker-enforced output token caps, brief-mode instruction, text-only `response.create` mode, cost-panel policy display, Worker/client tests | in progress |
 | pending | `feat/idle-auto-disconnect` | Idle auto-disconnect: activity-based warning and disconnect timers, transcript notices, cost-panel policy display, client helper tests | in progress |
 | pending | `docs/design-measurement-backfill` | Measurement backfill support: usage-meter JSON/CSV export, repeatable measurement protocol, pending evidence table scaffold | in progress |
+| pending | `feat/chinese-interface-localization` | Chinese default interface localization: primary workspace labels, controls, transcript notices, accessibility labels, and Realtime client error messages | in progress |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission
@@ -188,7 +189,7 @@ which did you adopt"; adopted ones need measured evidence.*
 
 | Candidate | Method sketch | Why candidate, not planned |
 | --- | --- | --- |
-| Interface localization (Chinese) | Extract UI strings from `assistant-workspace.tsx` into a copy map; Chinese as default per contest audience | High demo value, zero cost impact; schedule near the end so strings are stable |
+| Interface localization (Chinese) | Translate primary workspace labels, controls, transcript notices, accessibility labels, and Realtime client error messages to Chinese by default | Shipped as `feat/chinese-interface-localization`; no runtime language switching in this increment |
 | Cloudflare deployment | `wrangler deploy` with `OPENAI_API_KEY` secret; document the public demo URL in README | Needs the owner's Cloudflare account/decision; everything already runs on Workers |
 | Text-history summarization | After N turns, replace old text items with a compact summary item (client-built, then prune originals) | Real snowball reduction for long chats, but riskier UX (model may "forget" details); frames were the cheap 80% |
 | Session usage export | Download per-turn usage as JSON/CSV from the meter | Absorbed into 3.5 as the measurement export path |

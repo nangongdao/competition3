@@ -43,6 +43,7 @@ server side.
 | Close forgotten-open Realtime sessions | Implemented | The browser warns after sustained inactivity and closes the Realtime connection after 120 seconds idle while preserving the 10-minute hard cap. |
 | Stop paying for consumed camera frames on later turns | Implemented | Consumed frame items are deleted from the server-side conversation after each response, with a visible pruned counter and an opt-out toggle. |
 | Skip static interval frames | Implemented | Automatic sampling compares downscaled grayscale frame signatures and skips low-change uploads; manual frame actions bypass the gate. |
+| Use Chinese as the default demo interface | Implemented | Primary workspace labels, controls, transcript notices, accessibility labels, and client-side Realtime errors are localized for the contest audience. |
 | Package final contest demo | Planned | Final pass should include verification notes and PR descriptions. |
 
 ## Cost Controls

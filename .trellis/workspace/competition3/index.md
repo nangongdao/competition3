@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 14
 - **Last Active**: 2026-06-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~439 | Active |
+| `journal-1.md` | ~481 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-06-13 | Chinese Interface Localization | `9b5e57b`, `1f47863`, `436714e` | `feat/chinese-interface-localization` |
 | 13 | 2026-06-13 | Usage report export and measurement protocol | `12567ef`, `1cf0635` | `docs/design-measurement-backfill` |
 | 12 | 2026-06-13 | Idle auto-disconnect | `7196e1f` | `feat/idle-auto-disconnect` |
 | 11 | 2026-06-13 | Response budgets | `ddf9ac4` | `feat/response-budgets` |
