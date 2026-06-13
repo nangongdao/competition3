@@ -19,3 +19,22 @@ If you're using Codex or another agent-capable tool, additional project-scoped h
 Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.
 
 <!-- TRELLIS:END -->
+
+## Project Delivery Requirements
+
+This repository is a competition submission. Before making implementation,
+documentation, or build changes, read `task.md` and follow its delivery rules.
+
+- Work on a task branch, not directly on `main`.
+- Keep each pull request focused on one feature or one coherent change.
+- Maintain continuous commit and pull request history; do not batch all work into
+  one final submission.
+- Open a GitHub pull request targeting `main` for each completed task. Do not
+  treat `git push origin main` as task completion unless the user explicitly
+  overrides the competition workflow.
+- PR titles and descriptions must be non-empty and must include: feature or
+  change description, implementation approach, and verification/testing method.
+- If new third-party libraries or frameworks are introduced, list them in
+  `README.md` and clarify which parts are original project work.
+- For Git pull/push/PR troubleshooting, follow
+  `.trellis/spec/shared/pr-workflow.md` before retrying commands repeatedly.
