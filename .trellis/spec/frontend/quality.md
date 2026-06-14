@@ -488,6 +488,29 @@ test.describe("Authentication", () => {
 - Third-party library behavior (test your integration, not the library)
 - One-liner utility functions that are trivially correct
 
+### Localized Text Encoding Regression
+
+When adding or repairing localized UI copy, add a source-level regression test
+for files that previously contained corrupted text. A common symptom of a bad
+encoding save is literal `???` in source strings. The test should import the
+target files with Vite `?raw` and fail on consecutive question-mark replacement
+text.
+
+```typescript
+import { describe, expect, it } from "vitest";
+
+import localizedComponentSource from "@/modules/example/components/example.tsx?raw";
+
+describe("localized source text", () => {
+  it("does not contain question-mark replacement text", () => {
+    expect(localizedComponentSource).not.toMatch(/\?{3,}/);
+  });
+});
+```
+
+This keeps the check compatible with the frontend `tsconfig` because it avoids
+Node-only `fs` imports in files that are type-checked as browser code.
+
 ---
 
 ## Summary
