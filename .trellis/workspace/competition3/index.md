@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 19
+- **Total Sessions**: 20
 - **Last Active**: 2026-06-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~651 | Active |
+| `journal-1.md` | ~685 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 20 | 2026-06-14 | Fix Chinese localized UI text | `a604a82`, `dfcaefe` | `fix/chinese-encoding-display` |
 | 19 | 2026-06-14 | Overall delivery readiness | `4289c6c`, `4cd7302` | `chore/record-overall-delivery-journal` |
 | 18 | 2026-06-13 | Final demo verification package | `33acdf7`, `fb9cc70` | `docs/final-demo-packaging` |
 | 17 | 2026-06-13 | Chat mode browser speech adapter | `fc36a56`, `cc809f8`, `343b0e6` | `feat/chat-mode-browser-speech-adapter` |

@@ -132,26 +132,26 @@ export function collectFinalRecognitionTranscript(
 
 export function getRecognitionErrorMessage(errorCode: string | undefined): string {
   if (errorCode === "not-allowed" || errorCode === "service-not-allowed") {
-    return "?????????????";
+    return "浏览器拒绝了语音识别权限。";
   }
 
   if (errorCode === "no-speech") {
-    return "????????????";
+    return "没有识别到语音，请再试一次。";
   }
 
   if (errorCode === "audio-capture") {
-    return "?????????????";
+    return "浏览器无法访问麦克风。";
   }
 
   if (errorCode === "network") {
-    return "??????????????";
+    return "语音识别服务网络异常。";
   }
 
   if (errorCode === "language-not-supported") {
-    return "?????????????????";
+    return "当前浏览器不支持所选识别语言。";
   }
 
-  return "??????????";
+  return "语音识别失败。";
 }
 
 export function useBrowserSpeechAdapter({
@@ -200,9 +200,9 @@ export function useBrowserSpeechAdapter({
       setSpeechState((current) => ({
         ...current,
         recognitionStatus: "unsupported",
-        recognitionError: "?????????????",
+        recognitionError: "当前浏览器不支持语音识别。",
       }));
-      onStatusMessage("?????????????");
+      onStatusMessage("当前浏览器不支持语音识别。");
       return;
     }
 
@@ -220,7 +220,7 @@ export function useBrowserSpeechAdapter({
       const transcript = collectFinalRecognitionTranscript(event.results);
 
       if (transcript.length === 0) {
-        onStatusMessage("??????????????");
+        onStatusMessage("没有识别到可发送的文字。");
         return;
       }
 
@@ -256,7 +256,7 @@ export function useBrowserSpeechAdapter({
       recognitionStatus: "listening",
       recognitionError: undefined,
     }));
-    onStatusMessage("???? Chat ???????");
+    onStatusMessage("正在进行 Chat 语音输入。");
 
     try {
       recognition.start();
@@ -265,9 +265,9 @@ export function useBrowserSpeechAdapter({
       setSpeechState((current) => ({
         ...current,
         recognitionStatus: "error",
-        recognitionError: "????????????",
+        recognitionError: "语音识别启动失败。",
       }));
-      onStatusMessage("????????????");
+      onStatusMessage("语音识别启动失败。");
     }
   }, [language, onStatusMessage, onTranscript]);
 
@@ -285,7 +285,7 @@ export function useBrowserSpeechAdapter({
         scope?.speechSynthesis === undefined ||
         scope.SpeechSynthesisUtterance === undefined
       ) {
-        onStatusMessage("?????????????");
+        onStatusMessage("当前浏览器不支持语音朗读。");
         return;
       }
 
@@ -306,7 +306,7 @@ export function useBrowserSpeechAdapter({
           ...current,
           isSpeaking: false,
         }));
-        onStatusMessage("??????????");
+        onStatusMessage("语音朗读失败。");
       };
 
       scope.speechSynthesis.cancel();

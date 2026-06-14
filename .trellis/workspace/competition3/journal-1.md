@@ -649,3 +649,37 @@ Merged the stacked PR chain through #17 into main, updated roadmap delivery stat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: Fix Chinese localized UI text
+
+**Date**: 2026-06-14
+**Task**: Fix Chinese localized UI text
+**Branch**: `fix/chinese-encoding-display`
+
+### Summary
+
+Restored corrupted Chinese UI and hook messages, added a raw-source regression test for question-mark replacement text, and documented the encoding regression guard in the frontend quality spec.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a604a82` | (see git log) |
+| `dfcaefe` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
