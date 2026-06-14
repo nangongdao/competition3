@@ -719,3 +719,69 @@ Improved Chat mode controls and browser speech error messaging, added third-part
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: Worker-backed Chat Speech Transcription
+
+**Date**: 2026-06-14
+**Task**: Worker-backed Chat Speech Transcription
+**Branch**: `feat/worker-backed-chat-speech-transcription`
+
+### Summary
+
+Added Worker-backed Chat voice transcription with Cloudflare runtime variables, frontend recording controls, tests, and deployment docs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `733da95` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 23: Separate ASR API key
+
+**Date**: 2026-06-14
+**Task**: Separate ASR API key
+**Branch**: `feat/worker-backed-chat-speech-transcription`
+
+### Summary
+
+Added OPENAI_TRANSCRIPTION_API_KEY for Worker speech transcription with shared-key fallback, updated docs/specs/scripts, and verified URL composition behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8006c3b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

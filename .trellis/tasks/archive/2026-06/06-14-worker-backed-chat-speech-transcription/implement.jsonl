@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Worker API route conventions and backend quality expectations."}
+{"file": ".trellis/spec/backend/api-patterns.md", "reason": "Existing Worker route/error and provider boundary patterns."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend structure and UI integration guidance."}
+{"file": ".trellis/spec/frontend/hooks.md", "reason": "Chat, voice, and Worker-backed hook contracts."}
+{"file": ".trellis/spec/shared/typescript.md", "reason": "Shared TypeScript style and safety rules."}
+{"file": ".trellis/spec/shared/pr-workflow.md", "reason": "Competition PR and verification workflow."}
+{"file": ".trellis/tasks/06-14-worker-backed-chat-speech-transcription/research/competition2-asr-pattern.md", "reason": "Reference backend-backed ASR pattern from the local companion project."}

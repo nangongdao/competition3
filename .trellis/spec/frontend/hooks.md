@@ -638,8 +638,10 @@ type BrowserSpeechAdapterState = {
 ### 3. Contracts
 
 - The browser must call same-origin Worker endpoints only.
-- Permanent `OPENAI_API_KEY`, provider base URLs, and model routing values must
+- Permanent provider keys, provider base URLs, and model routing values must
   never be exposed through frontend settings, `VITE_*`, localStorage, or URLs.
+  This includes `OPENAI_API_KEY` and transcription-specific keys such as
+  `OPENAI_TRANSCRIPTION_API_KEY`.
 - `useProviderConfig` may expose only safe non-secret defaults such as
   `providerMode`.
 - Chat mode does not require a Realtime session, data channel, or WebRTC peer
@@ -673,6 +675,7 @@ type BrowserSpeechAdapterState = {
 | Missing Worker key or chat model | Surface the Worker error in the transcript/error banner. |
 | Chat request is in flight | Disable duplicate text/frame sends until it completes. |
 | Chat success | Append assistant text to the transcript and return to ready/idle. |
+| Chat success response is non-JSON or invalid shape | Show a localized contract error that hints the user may be on the Vite preview URL instead of the Worker URL. Do not surface raw `Unexpected token '<'` JSON parser text. |
 | Chat failure | Move to error phase and keep media preview usable. |
 | User switches from Realtime to Chat while connected | Stop the Realtime connection before switching modes. |
 | Browser speech recognition unsupported | Disable Chat voice input or show an explanatory unsupported state. |
@@ -729,6 +732,150 @@ await sendChatCompletion({
   message: recognizedText,
   responseBudget: "brief",
 });
+```
+
+## Scenario: Worker-Backed Chat Voice Transcription Hook
+
+### 1. Scope / Trigger
+
+- Trigger: adding or changing browser hooks that record short microphone
+  utterances for Chat mode and send them to a Worker-backed transcription API.
+- This is the reliable Chat voice path when browser Web Speech recognition or
+  Realtime/WebRTC provider support is unavailable.
+
+### 2. Signatures
+
+- Hook location:
+  `app/modules/assistant/hooks/use-worker-speech-transcription.ts`
+- Transcription API: `POST /api/speech/transcription`
+- Hook input:
+
+```typescript
+type UseWorkerSpeechTranscriptionInput = {
+  stream: MediaStream | null;
+  language?: string;
+  onStatusMessage: (message: string) => void;
+};
+```
+
+- Hook result:
+
+```typescript
+type WorkerSpeechTranscriptionStatus =
+  | "unsupported"
+  | "idle"
+  | "recording"
+  | "transcribing"
+  | "error";
+
+type UseWorkerSpeechTranscriptionResult = {
+  transcriptionState: {
+    isRecordingSupported: boolean;
+    status: WorkerSpeechTranscriptionStatus;
+    errorMessage?: string;
+  };
+  startRecording: () => boolean;
+  stopRecording: () => Promise<SpeechTranscriptionSuccessResponse | null>;
+  cancelRecording: () => void;
+};
+```
+
+### 3. Contracts
+
+- Feature-detect `MediaRecorder`; unsupported browsers must keep keyboard Chat
+  input usable and show a localized explanatory state.
+- Use the existing app `MediaStream` and record only the audio track. Do not
+  stop the underlying track when creating an audio-only recording stream.
+- Pick the first supported MIME type from a small ordered list; if the browser
+  supports `MediaRecorder` but not `isTypeSupported`, allow the default
+  recorder type.
+- Send same-origin `multipart/form-data` to `/api/speech/transcription` with:
+  `audio` file and optional `language`.
+- Do not set `Content-Type` manually for multipart requests.
+- The hook returns normalized Worker responses; the component decides whether
+  to auto-send transcript text to Chat or fill the composer for review.
+- Continuous Chat voice loops belong in the component layer, not the Worker
+  contract: record one short utterance, stop on local silence/max-duration,
+  transcribe, send text through the existing Chat request, optionally await
+  local browser speech synthesis, then start the next recording only if the
+  user has not stopped the loop.
+- Continuous mode must expose an explicit stop control that cancels pending
+  restart timers and active local recording without stopping the camera stream.
+- Do not start the next continuous recording while transcription, Chat
+  completion, or local answer speech synthesis is still active; otherwise the
+  app can record its own spoken answer as the next user prompt.
+- Permanent provider keys, base URLs, and model IDs must never be exposed in
+  frontend state, `VITE_*`, localStorage, or query parameters.
+- Switching away from Chat mode or releasing media should cancel active
+  recording.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected handling |
+| --- | --- |
+| No `MediaRecorder` | Status `unsupported`; voice button disabled or explanatory |
+| No audio track | Status `error`; ask user to authorize microphone |
+| Recording start throws | Status `error`; show microphone permission/start failure |
+| Recording stops with no chunks | Status `error`; ask user to retry |
+| Worker returns a typed API error | Localize message and keep typed Chat usable |
+| Worker returns 503 `missing_openai_api_key` | Tell the user the Worker needs `OPENAI_TRANSCRIPTION_API_KEY` or fallback `OPENAI_API_KEY`; do not suggest a browser-side key setting |
+| Worker returns non-JSON or invalid success shape | Show a localized transcription contract error that hints the user may be on the Vite preview URL instead of the Worker URL. Do not surface raw `Unexpected token '<'` JSON parser text. |
+| Transcription succeeds | Return `{ success: true, text, model }` to the component |
+| Continuous mode is stopped mid-recording | Cancel local recording and do not submit a partial turn |
+| Continuous mode is stopped during transcription or Chat response | Finish safe cleanup but do not schedule another recording |
+| Browser speech synthesis is active in continuous mode | Wait for `onend` or cancellation before starting the next recording |
+
+### 5. Good/Base/Bad Cases
+
+- Good: user grants media, records a short question, Worker transcribes it, and
+  the component auto-sends the recognized text through `/api/chat/completion`.
+- Good: review mode inserts transcript text into the existing composer without
+  spending Chat tokens until the user sends.
+- Good: continuous mode auto-sends one transcribed utterance, speaks the answer
+  locally where supported, and only then records the next utterance.
+- Base: typed Chat remains available when recording is unsupported or
+  transcription fails.
+- Base: transcription can use a dedicated Worker secret
+  `OPENAI_TRANSCRIPTION_API_KEY`, falling back to `OPENAI_API_KEY`.
+- Bad: the component sends raw audio to `/api/chat/completion`.
+- Bad: the browser calls the upstream transcription provider directly or embeds
+  provider routing in frontend code.
+- Bad: a continuous voice loop restarts recording immediately after scheduling
+  answer speech, causing the browser to capture the assistant's own spoken
+  response.
+
+### 6. Tests Required
+
+- Helper tests cover MIME type selection and upload file extension mapping.
+- Helper tests cover localized API error messages.
+- Worker route tests cover the server-side transcription contract.
+- Typecheck must verify frontend imports backend response types through
+  type-only imports.
+- Manual browser smoke test should cover auto-send mode, review mode,
+  continuous mode start/stop, microphone permission failure, and typed Chat
+  fallback.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```typescript
+await fetch("/api/chat/completion", {
+  method: "POST",
+  body: JSON.stringify({ audioBlob }),
+});
+```
+
+Correct:
+
+```typescript
+const transcription = await stopRecording();
+if (transcription !== null) {
+  await sendChatCompletion({
+    message: transcription.text,
+    responseBudget: "standard",
+  });
+}
 ```
 
 ---

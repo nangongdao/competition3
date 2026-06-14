@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Verify Worker route conventions and backend quality expectations."}
+{"file": ".trellis/spec/backend/api-patterns.md", "reason": "Verify route error handling and provider config behavior."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Verify frontend structure and UI integration."}
+{"file": ".trellis/spec/frontend/hooks.md", "reason": "Verify Chat voice hook and Worker endpoint contracts."}
+{"file": ".trellis/spec/shared/typescript.md", "reason": "Verify shared TypeScript safety rules."}
+{"file": ".trellis/spec/shared/pr-workflow.md", "reason": "Verify required quality and PR workflow."}

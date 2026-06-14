@@ -79,9 +79,11 @@ type UseBrowserSpeechAdapterResult = {
   speechState: BrowserSpeechAdapterState;
   startListening: () => void;
   stopListening: () => void;
-  speak: (text: string) => void;
+  speak: (text: string) => Promise<boolean>;
   cancelSpeech: () => void;
 };
+
+type SpeechCompletionResolver = (completed: boolean) => void;
 
 function getBrowserSpeechScope(): BrowserSpeechScope | null {
   if (typeof window === "undefined") {
@@ -161,6 +163,7 @@ export function useBrowserSpeechAdapter({
 }: UseBrowserSpeechAdapterInput): UseBrowserSpeechAdapterResult {
   const support = useMemo(() => getBrowserSpeechSupport(), []);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const speechCompletionRef = useRef<SpeechCompletionResolver | null>(null);
   const [speechState, setSpeechState] = useState<BrowserSpeechAdapterState>({
     isRecognitionSupported: support.recognition,
     isSynthesisSupported: support.synthesis,
@@ -170,6 +173,8 @@ export function useBrowserSpeechAdapter({
 
   const cancelSpeech = useCallback((): void => {
     const scope = getBrowserSpeechScope();
+    speechCompletionRef.current?.(false);
+    speechCompletionRef.current = null;
 
     if (scope?.speechSynthesis === undefined) {
       return;
@@ -272,49 +277,63 @@ export function useBrowserSpeechAdapter({
   }, [language, onStatusMessage, onTranscript]);
 
   const speak = useCallback(
-    (text: string): void => {
+    (text: string): Promise<boolean> => {
       const trimmedText = text.trim();
 
       if (trimmedText.length === 0) {
-        return;
+        return Promise.resolve(false);
       }
 
       const scope = getBrowserSpeechScope();
+      const speechSynthesis = scope?.speechSynthesis;
+      const SpeechSynthesisUtteranceConstructor =
+        scope?.SpeechSynthesisUtterance;
 
       if (
-        scope?.speechSynthesis === undefined ||
-        scope.SpeechSynthesisUtterance === undefined
+        speechSynthesis === undefined ||
+        SpeechSynthesisUtteranceConstructor === undefined
       ) {
         onStatusMessage("当前浏览器不支持语音朗读。");
-        return;
+        return Promise.resolve(false);
       }
 
-      const utterance = new scope.SpeechSynthesisUtterance(trimmedText);
-      utterance.lang = language;
-      utterance.rate = 1;
-      utterance.pitch = 1;
+      return new Promise<boolean>((resolve) => {
+        const utterance = new SpeechSynthesisUtteranceConstructor(trimmedText);
+        utterance.lang = language;
+        utterance.rate = 1;
+        utterance.pitch = 1;
 
-      utterance.onend = (): void => {
+        const settleSpeech = (completed: boolean): void => {
+          if (speechCompletionRef.current !== settleSpeech) {
+            return;
+          }
+
+          speechCompletionRef.current = null;
+          setSpeechState((current) => ({
+            ...current,
+            isSpeaking: false,
+          }));
+          resolve(completed);
+        };
+
+        utterance.onend = (): void => {
+          settleSpeech(true);
+        };
+
+        utterance.onerror = (): void => {
+          onStatusMessage("语音朗读失败。");
+          settleSpeech(false);
+        };
+
+        speechCompletionRef.current?.(false);
+        speechSynthesis.cancel();
+        speechCompletionRef.current = settleSpeech;
         setSpeechState((current) => ({
           ...current,
-          isSpeaking: false,
+          isSpeaking: true,
         }));
-      };
-
-      utterance.onerror = (): void => {
-        setSpeechState((current) => ({
-          ...current,
-          isSpeaking: false,
-        }));
-        onStatusMessage("语音朗读失败。");
-      };
-
-      scope.speechSynthesis.cancel();
-      setSpeechState((current) => ({
-        ...current,
-        isSpeaking: true,
-      }));
-      scope.speechSynthesis.speak(utterance);
+        speechSynthesis.speak(utterance);
+      });
     },
     [language, onStatusMessage],
   );
@@ -328,6 +347,8 @@ export function useBrowserSpeechAdapter({
       }
 
       const scope = getBrowserSpeechScope();
+      speechCompletionRef.current?.(false);
+      speechCompletionRef.current = null;
       scope?.speechSynthesis?.cancel();
     };
   }, []);
