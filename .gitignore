@@ -6,6 +6,7 @@ node_modules/
 dist/
 dist-worker/
 .wrangler/
+.local-preview/
 
 # Local environment
 .dev.vars
