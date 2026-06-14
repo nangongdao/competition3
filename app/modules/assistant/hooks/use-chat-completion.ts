@@ -82,6 +82,26 @@ async function readChatError(response: Response): Promise<string> {
   return `Chat Completions 请求失败，状态码 ${response.status}。`;
 }
 
+async function readChatSuccess(
+  response: Response,
+): Promise<ChatCompletionSuccessResponse> {
+  let value: unknown;
+
+  try {
+    value = (await response.json()) as unknown;
+  } catch {
+    throw new Error(
+      "Chat Completions 返回格式不符合预期，请确认当前访问的是 Worker 地址。",
+    );
+  }
+
+  if (!isChatCompletionSuccessResponse(value)) {
+    throw new Error("Chat Completions 返回格式不符合预期。");
+  }
+
+  return value;
+}
+
 export function useChatCompletion(): UseChatCompletionResult {
   const [chatState, setChatState] = useState<ChatCompletionState>({
     isSending: false,
@@ -119,11 +139,7 @@ export function useChatCompletion(): UseChatCompletionResult {
           throw new Error(await readChatError(response));
         }
 
-        const value = (await response.json()) as unknown;
-
-        if (!isChatCompletionSuccessResponse(value)) {
-          throw new Error("Chat Completions 返回格式不符合预期。");
-        }
+        const value = await readChatSuccess(response);
 
         setChatState({ isSending: false });
         return value;

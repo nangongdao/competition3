@@ -62,7 +62,8 @@ requires a Chat Completions endpoint.
 .\scripts\start-chat-worker.ps1 `
   -ApiKey "your-provider-key" `
   -BaseUrl "https://api.your-provider.example/v1" `
-  -ChatModel "your-vision-chat-model"
+  -ChatModel "your-vision-chat-model" `
+  -TranscriptionModel "whisper-1"
 ```
 
 In a second PowerShell window:
@@ -82,8 +83,10 @@ Manual checks:
 * Type a message and receive a text answer.
 * If the selected model supports image input, sample a camera frame and ask a
   visual question.
-* In a browser with Web Speech API support, try dictation and optional spoken
-  answer playback.
+* Try Chat voice input: record a short utterance, confirm it transcribes through
+  the Worker, and verify the default mode auto-sends it to Chat. Switch to
+  review mode and confirm the transcript fills the text composer instead.
+* If the browser supports speech synthesis, try optional spoken answer playback.
 
 ## 4. Realtime Provider Demo
 

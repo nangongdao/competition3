@@ -13,6 +13,8 @@ boundary in place:
 * `/api/provider/config` endpoint for safe non-secret provider mode defaults
 * `/api/chat/completion` endpoint for OpenAI-compatible Chat Completions
   providers
+* `/api/speech/transcription` endpoint for OpenAI-compatible audio
+  transcription providers
 * `/api/realtime/session` endpoint for Worker-created short-lived Realtime sessions
 * Tailwind CSS v4 setup
 * Browser camera and microphone permission flow
@@ -25,8 +27,10 @@ boundary in place:
   counters to show static-scene upload savings
 * Sampled frame delivery through the Realtime data channel
 * Text message composer for typed questions during a Realtime session
-* Browser speech dictation and optional spoken answer playback for Chat
-  Completions mode when the browser supports Web Speech APIs
+* Worker-backed short voice transcription for Chat Completions mode, with
+  auto-send or review-before-send voice input modes
+* Optional browser spoken answer playback for Chat Completions mode when the
+  browser supports speech synthesis
 * Per-session usage meter built from Realtime `response.done` usage events,
   with modality buckets and an estimated cost
 * Conversation history pruning that deletes consumed camera frames so they
@@ -38,7 +42,9 @@ boundary in place:
 
 The media workspace remains usable without model credentials. Real model calls
 require the Worker endpoint and `OPENAI_API_KEY`. Chat Completions mode also
-requires `OPENAI_CHAT_MODEL`; Realtime mode requires a Realtime-capable model.
+requires `OPENAI_CHAT_MODEL`; Chat voice input additionally needs a provider
+that supports `/audio/transcriptions` or an equivalent configured endpoint.
+Realtime mode requires a Realtime-capable model.
 
 ## Requirements
 
@@ -138,7 +144,8 @@ corepack pnpm install
 .\scripts\start-chat-worker.ps1 `
   -ApiKey "your-provider-key" `
   -BaseUrl "https://api.your-provider.example/v1" `
-  -ChatModel "your-vision-chat-model"
+  -ChatModel "your-vision-chat-model" `
+  -TranscriptionModel "whisper-1"
 ```
 
 Open the Worker URL after startup:
@@ -154,7 +161,9 @@ If the provider uses a custom Chat Completions path:
   -ApiKey "your-provider-key" `
   -BaseUrl "https://api.your-provider.example/v1" `
   -ChatCompletionsPath "/chat/completions" `
-  -ChatModel "your-vision-chat-model"
+  -ChatModel "your-vision-chat-model" `
+  -TranscriptionsPath "/audio/transcriptions" `
+  -TranscriptionModel "whisper-1"
 ```
 
 If the provider requires a completely custom endpoint URL:
@@ -163,7 +172,9 @@ If the provider requires a completely custom endpoint URL:
 .\scripts\start-chat-worker.ps1 `
   -ApiKey "your-provider-key" `
   -ChatCompletionsUrl "https://api.your-provider.example/custom/chat" `
-  -ChatModel "your-vision-chat-model"
+  -ChatModel "your-vision-chat-model" `
+  -TranscriptionsUrl "https://api.your-provider.example/custom/transcribe" `
+  -TranscriptionModel "whisper-1"
 ```
 
 ## Windows Quick Start With Realtime
@@ -248,6 +259,11 @@ OPENAI_CHAT_COMPLETIONS_URL=
 OPENAI_CHAT_MODEL=
 OPENAI_CHAT_TOKEN_LIMIT_PARAMETER=max_tokens
 OPENAI_CHAT_VISION_INPUT=enabled
+OPENAI_TRANSCRIPTION_BASE_URL=
+OPENAI_TRANSCRIPTIONS_PATH=/audio/transcriptions
+OPENAI_TRANSCRIPTIONS_URL=
+OPENAI_TRANSCRIPTION_MODEL=whisper-1
+OPENAI_TRANSCRIPTION_LANGUAGE=zh
 OPENAI_REALTIME_BASE_URL=
 OPENAI_REALTIME_SESSION_PATH=/realtime/sessions
 OPENAI_REALTIME_WEBRTC_PATH=/realtime
@@ -287,6 +303,16 @@ Parameter meanings:
   `image_url` content. Use `enabled` for vision-capable chat models or
   `disabled` for text-only models that reject multimodal message content.
   Default: `enabled`.
+* `OPENAI_TRANSCRIPTION_BASE_URL`: Optional transcription-specific API root. If
+  set, it overrides `OPENAI_BASE_URL` only for `/api/speech/transcription`.
+* `OPENAI_TRANSCRIPTIONS_PATH`: Path appended to the selected transcription
+  base URL. Default: `/audio/transcriptions`.
+* `OPENAI_TRANSCRIPTIONS_URL`: Optional full audio transcription endpoint URL.
+  Use only when the provider cannot be represented by base URL plus path.
+* `OPENAI_TRANSCRIPTION_MODEL`: Provider model ID used for audio transcription.
+  Defaults to `whisper-1` when unset.
+* `OPENAI_TRANSCRIPTION_LANGUAGE`: Optional transcription language hint. Use
+  `zh` for Chinese voice input, or leave blank for provider auto-detection.
 * `OPENAI_REALTIME_BASE_URL`: Optional Realtime-specific API root. If set, it
   overrides `OPENAI_BASE_URL` only for Realtime session creation and WebRTC SDP
   exchange.
@@ -329,12 +355,27 @@ must support:
   still answer typed questions when `OPENAI_CHAT_VISION_INPUT=disabled`, but
   they cannot understand the sampled frame.
 
-Chat mode does not stream raw microphone audio to the model and does not ask
-the provider to generate audio tokens. Instead, supported browsers can use the
-Web Speech APIs as a local adapter: speech recognition fills the existing text
-composer, and speech synthesis can read returned text answers aloud. Browser
-support and recognition quality depend on the user's browser/OS; use Realtime
-mode when you need true low-latency model audio.
+Chat mode does not require Realtime/WebRTC support. For voice input, supported
+browsers record a short microphone utterance and send that audio to the Worker,
+which forwards it to the configured transcription endpoint and then uses the
+recognized text with the existing Chat Completions request. The workspace can
+auto-send the recognized text for a voice-conversation feel, or fill the text
+composer for review before sending. Optional spoken answer playback still uses
+browser speech synthesis and does not create provider audio-output tokens. Use
+Realtime mode when you need true low-latency model audio.
+
+### Audio transcription for Chat voice input
+
+The transcription provider/model must support:
+
+* Bearer API key authentication with `OPENAI_API_KEY`.
+* Multipart form-data requests with `model`, `file`, `response_format=json`,
+  and optional `language`.
+* A response body with a non-empty `text` field.
+
+The Worker accepts browser recordings up to 10 MB and forwards only short
+utterances captured through the Chat voice button. It does not expose the API
+key or provider URL to the browser.
 
 ### Realtime mode
 

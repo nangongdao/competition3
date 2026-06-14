@@ -673,6 +673,7 @@ type BrowserSpeechAdapterState = {
 | Missing Worker key or chat model | Surface the Worker error in the transcript/error banner. |
 | Chat request is in flight | Disable duplicate text/frame sends until it completes. |
 | Chat success | Append assistant text to the transcript and return to ready/idle. |
+| Chat success response is non-JSON or invalid shape | Show a localized contract error that hints the user may be on the Vite preview URL instead of the Worker URL. Do not surface raw `Unexpected token '<'` JSON parser text. |
 | Chat failure | Move to error phase and keep media preview usable. |
 | User switches from Realtime to Chat while connected | Stop the Realtime connection before switching modes. |
 | Browser speech recognition unsupported | Disable Chat voice input or show an explanatory unsupported state. |
@@ -729,6 +730,128 @@ await sendChatCompletion({
   message: recognizedText,
   responseBudget: "brief",
 });
+```
+
+## Scenario: Worker-Backed Chat Voice Transcription Hook
+
+### 1. Scope / Trigger
+
+- Trigger: adding or changing browser hooks that record short microphone
+  utterances for Chat mode and send them to a Worker-backed transcription API.
+- This is the reliable Chat voice path when browser Web Speech recognition or
+  Realtime/WebRTC provider support is unavailable.
+
+### 2. Signatures
+
+- Hook location:
+  `app/modules/assistant/hooks/use-worker-speech-transcription.ts`
+- Transcription API: `POST /api/speech/transcription`
+- Hook input:
+
+```typescript
+type UseWorkerSpeechTranscriptionInput = {
+  stream: MediaStream | null;
+  language?: string;
+  onStatusMessage: (message: string) => void;
+};
+```
+
+- Hook result:
+
+```typescript
+type WorkerSpeechTranscriptionStatus =
+  | "unsupported"
+  | "idle"
+  | "recording"
+  | "transcribing"
+  | "error";
+
+type UseWorkerSpeechTranscriptionResult = {
+  transcriptionState: {
+    isRecordingSupported: boolean;
+    status: WorkerSpeechTranscriptionStatus;
+    errorMessage?: string;
+  };
+  startRecording: () => boolean;
+  stopRecording: () => Promise<SpeechTranscriptionSuccessResponse | null>;
+  cancelRecording: () => void;
+};
+```
+
+### 3. Contracts
+
+- Feature-detect `MediaRecorder`; unsupported browsers must keep keyboard Chat
+  input usable and show a localized explanatory state.
+- Use the existing app `MediaStream` and record only the audio track. Do not
+  stop the underlying track when creating an audio-only recording stream.
+- Pick the first supported MIME type from a small ordered list; if the browser
+  supports `MediaRecorder` but not `isTypeSupported`, allow the default
+  recorder type.
+- Send same-origin `multipart/form-data` to `/api/speech/transcription` with:
+  `audio` file and optional `language`.
+- Do not set `Content-Type` manually for multipart requests.
+- The hook returns normalized Worker responses; the component decides whether
+  to auto-send transcript text to Chat or fill the composer for review.
+- Permanent provider keys, base URLs, and model IDs must never be exposed in
+  frontend state, `VITE_*`, localStorage, or query parameters.
+- Switching away from Chat mode or releasing media should cancel active
+  recording.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected handling |
+| --- | --- |
+| No `MediaRecorder` | Status `unsupported`; voice button disabled or explanatory |
+| No audio track | Status `error`; ask user to authorize microphone |
+| Recording start throws | Status `error`; show microphone permission/start failure |
+| Recording stops with no chunks | Status `error`; ask user to retry |
+| Worker returns a typed API error | Localize message and keep typed Chat usable |
+| Worker returns non-JSON or invalid success shape | Show a localized transcription contract error that hints the user may be on the Vite preview URL instead of the Worker URL. Do not surface raw `Unexpected token '<'` JSON parser text. |
+| Transcription succeeds | Return `{ success: true, text, model }` to the component |
+
+### 5. Good/Base/Bad Cases
+
+- Good: user grants media, records a short question, Worker transcribes it, and
+  the component auto-sends the recognized text through `/api/chat/completion`.
+- Good: review mode inserts transcript text into the existing composer without
+  spending Chat tokens until the user sends.
+- Base: typed Chat remains available when recording is unsupported or
+  transcription fails.
+- Bad: the component sends raw audio to `/api/chat/completion`.
+- Bad: the browser calls the upstream transcription provider directly or embeds
+  provider routing in frontend code.
+
+### 6. Tests Required
+
+- Helper tests cover MIME type selection and upload file extension mapping.
+- Helper tests cover localized API error messages.
+- Worker route tests cover the server-side transcription contract.
+- Typecheck must verify frontend imports backend response types through
+  type-only imports.
+- Manual browser smoke test should cover auto-send mode, review mode,
+  microphone permission failure, and typed Chat fallback.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```typescript
+await fetch("/api/chat/completion", {
+  method: "POST",
+  body: JSON.stringify({ audioBlob }),
+});
+```
+
+Correct:
+
+```typescript
+const transcription = await stopRecording();
+if (transcription !== null) {
+  await sendChatCompletion({
+    message: transcription.text,
+    responseBudget: "standard",
+  });
+}
 ```
 
 ---

@@ -63,6 +63,7 @@ useless input, then cap output, then write down the measured results.**
 | #14 | `feat/chat-completions-provider-mode` | Chat Completions compatibility mode: ordinary `/chat/completions` Worker route, safe provider-mode config endpoint, frontend mode switch, and third-party startup helper | merged |
 | #15 | `feat/chat-mode-browser-speech-adapter` | Browser speech adapter for Chat mode: Web Speech dictation fills the existing Chat text composer and optional speech synthesis reads Chat answers without provider audio tokens | merged |
 | #16 | `docs/final-demo-packaging` | Final demo packaging: local readiness script plus no-key, Chat Completions, Realtime, hardware, and cost-evidence verification checklist | merged |
+| #17 | `feat/worker-backed-speech-chat` | Worker-backed Chat voice transcription: short browser recording, `/api/speech/transcription` forwarding to OpenAI-compatible ASR, auto-send/review modes, and deployment docs | in progress |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission
