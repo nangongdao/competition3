@@ -95,7 +95,7 @@ Request JSON:
 | --- | --- | :---: | --- |
 | `message` | `string` | Yes | Trimmed, 1 to 4000 chars |
 | `imageDataUrl` | `string` | No | Must start with `data:image/`; use only with vision-capable models |
-| `responseBudget` | `"brief" \| "standard" \| "detailed"` | No | Defaults to `"standard"`; maps to upstream `max_tokens` |
+| `responseBudget` | `"brief" \| "standard" \| "detailed"` | No | Defaults to `"standard"`; maps to the configured upstream token limit field |
 | `instructions` | `string` | No | Trimmed, 1 to 1200 chars when present |
 
 Success response:
@@ -119,6 +119,8 @@ Environment:
 | `OPENAI_CHAT_COMPLETIONS_PATH` | No | Defaults to `/chat/completions` |
 | `OPENAI_CHAT_COMPLETIONS_URL` | No | Full endpoint override when base plus path cannot represent provider routing |
 | `OPENAI_CHAT_MODEL` | Yes | Chat or vision-chat provider model ID |
+| `OPENAI_CHAT_TOKEN_LIMIT_PARAMETER` | No | `max_tokens`, `max_completion_tokens`, or `none`; defaults to `max_tokens` |
+| `OPENAI_CHAT_VISION_INPUT` | No | `enabled` or `disabled`; defaults to `enabled` |
 
 #### 4. Validation & Error Matrix
 
@@ -138,7 +140,11 @@ Environment:
   Worker calls the provider with `messages` containing text and `image_url`
   content blocks.
 - Base: text-only models can answer typed messages but cannot understand camera
-  frames.
+  frames. Use `OPENAI_CHAT_VISION_INPUT=disabled` so the Worker omits image
+  content when a text-only provider rejects multimodal messages.
+- Base: providers that reject `max_tokens` can use
+  `OPENAI_CHAT_TOKEN_LIMIT_PARAMETER=max_completion_tokens` or `none` without
+  changing frontend code.
 - Bad: browser code stores the permanent API key, provider base URL, or model
   secret in `VITE_*`, localStorage, or query parameters.
 - Bad: Chat mode is treated as a Realtime session; it is ordinary stateless HTTP
@@ -153,6 +159,39 @@ Environment:
 - Upstream provider failure maps to 502.
 - Success test asserts the upstream URL, model, `max_tokens`, and text plus
   `image_url` message shape.
+- Compatibility tests assert `max_completion_tokens` mapping, omitted token
+  limit behavior, disabled vision input behavior, and non-JSON upstream error
+  body surfacing.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+
+```typescript
+// Assumes every OpenAI-compatible provider accepts the same optional fields.
+const payload = {
+  model,
+  messages,
+  max_tokens: 800,
+};
+```
+
+Correct:
+
+```typescript
+const payload = buildChatCompletionPayload({
+  model,
+  instructions,
+  responseBudget,
+  message,
+  imageDataUrl: env.OPENAI_CHAT_VISION_INPUT === "disabled"
+    ? undefined
+    : imageDataUrl,
+  tokenLimitParameter: resolveChatTokenLimitParameter(
+    env.OPENAI_CHAT_TOKEN_LIMIT_PARAMETER,
+  ),
+});
+```
 
 ### Scenario: Realtime Session Creation Endpoint
 

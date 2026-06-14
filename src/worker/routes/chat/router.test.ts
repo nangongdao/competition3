@@ -240,6 +240,7 @@ describe("chat completion route", () => {
     const upstreamBody = readMockRequestJson(firstCall[1]);
     expect(upstreamBody.model).toBe("configured-chat-model");
     expect(upstreamBody.max_tokens).toBe(300);
+    expect("max_completion_tokens" in upstreamBody).toBe(false);
 
     const messages = upstreamBody.messages;
     if (!Array.isArray(messages)) {
@@ -323,5 +324,173 @@ describe("chat completion route", () => {
     }
 
     expect(String(firstCall[0])).toBe("https://third-party.example/custom/chat");
+  });
+
+  it("can use max_completion_tokens for providers that reject max_tokens", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        void input;
+        void init;
+
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: "ok",
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/chat/completion",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: "hello",
+          responseBudget: "detailed",
+        }),
+      },
+      createEnv({
+        OPENAI_API_KEY: "provider-key",
+        OPENAI_CHAT_MODEL: "configured-chat-model",
+        OPENAI_CHAT_TOKEN_LIMIT_PARAMETER: "max_completion_tokens",
+      }),
+    );
+    const body = await readJson<ChatCompletionSuccessResponse>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.answer).toBe("ok");
+
+    const firstCall = fetchMock.mock.calls[0];
+    if (firstCall === undefined) {
+      throw new Error("Expected upstream fetch to be called.");
+    }
+
+    const upstreamBody = readMockRequestJson(firstCall[1]);
+    expect(upstreamBody.max_completion_tokens).toBe(1600);
+    expect("max_tokens" in upstreamBody).toBe(false);
+  });
+
+  it("can omit token limits and vision input for text-only providers", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        void input;
+        void init;
+
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: "text-only answer",
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/chat/completion",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: "What should I notice?",
+          imageDataUrl: "data:image/jpeg;base64,abc123",
+        }),
+      },
+      createEnv({
+        OPENAI_API_KEY: "provider-key",
+        OPENAI_CHAT_MODEL: "configured-chat-model",
+        OPENAI_CHAT_TOKEN_LIMIT_PARAMETER: "none",
+        OPENAI_CHAT_VISION_INPUT: "disabled",
+      }),
+    );
+    const body = await readJson<ChatCompletionSuccessResponse>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.answer).toBe("text-only answer");
+
+    const firstCall = fetchMock.mock.calls[0];
+    if (firstCall === undefined) {
+      throw new Error("Expected upstream fetch to be called.");
+    }
+
+    const upstreamBody = readMockRequestJson(firstCall[1]);
+    expect("max_tokens" in upstreamBody).toBe(false);
+    expect("max_completion_tokens" in upstreamBody).toBe(false);
+
+    const messages = upstreamBody.messages;
+    if (!Array.isArray(messages)) {
+      throw new Error("Expected upstream messages to be an array.");
+    }
+
+    expect(messages[1]).toEqual({
+      role: "user",
+      content: "What should I notice?",
+    });
+  });
+
+  it("includes non-JSON upstream error text in provider failures", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        void input;
+        void init;
+
+        return new Response("bad request: unsupported max_tokens", {
+          status: 400,
+          headers: {
+            "Content-Type": "text/plain",
+          },
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/chat/completion",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message: "hello" }),
+      },
+      createEnv({
+        OPENAI_API_KEY: "provider-key",
+        OPENAI_CHAT_MODEL: "configured-chat-model",
+      }),
+    );
+    const body = await readJson<ChatApiErrorResponse>(response);
+
+    expect(response.status).toBe(502);
+    expect(body.code).toBe("chat_completion_failed");
+    expect(body.error).toBe("Provider returned bad request: unsupported max_tokens");
   });
 });

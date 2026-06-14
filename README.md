@@ -246,6 +246,8 @@ OPENAI_CHAT_BASE_URL=
 OPENAI_CHAT_COMPLETIONS_PATH=/chat/completions
 OPENAI_CHAT_COMPLETIONS_URL=
 OPENAI_CHAT_MODEL=
+OPENAI_CHAT_TOKEN_LIMIT_PARAMETER=max_tokens
+OPENAI_CHAT_VISION_INPUT=enabled
 OPENAI_REALTIME_BASE_URL=
 OPENAI_REALTIME_SESSION_PATH=/realtime/sessions
 OPENAI_REALTIME_WEBRTC_PATH=/realtime
@@ -277,6 +279,14 @@ Parameter meanings:
 * `OPENAI_CHAT_MODEL`: Provider model ID used for Chat Completions mode. This
   is required for real Chat Completions calls. Use a vision-capable model if
   you want camera-frame understanding.
+* `OPENAI_CHAT_TOKEN_LIMIT_PARAMETER`: Output token limit field sent to the
+  Chat Completions provider. Use `max_tokens` for ordinary OpenAI-compatible
+  chat APIs, `max_completion_tokens` for providers/models that reject
+  `max_tokens`, or `none` if the provider rejects both. Default: `max_tokens`.
+* `OPENAI_CHAT_VISION_INPUT`: Whether Chat mode sends sampled camera frames as
+  `image_url` content. Use `enabled` for vision-capable chat models or
+  `disabled` for text-only models that reject multimodal message content.
+  Default: `enabled`.
 * `OPENAI_REALTIME_BASE_URL`: Optional Realtime-specific API root. If set, it
   overrides `OPENAI_BASE_URL` only for Realtime session creation and WebRTC SDP
   exchange.
@@ -309,12 +319,15 @@ must support:
 
 * `POST /v1/chat/completions` or a configurable equivalent endpoint.
 * Bearer API key authentication.
-* A request body with `model`, `messages`, and `max_tokens`.
+* A request body with `model`, `messages`, and either `max_tokens`,
+  `max_completion_tokens`, or no explicit token limit, depending on
+  `OPENAI_CHAT_TOKEN_LIMIT_PARAMETER`.
 * User message content as plain text.
 * `choices[0].message.content` text in the response.
 * For camera-frame understanding: multimodal message content with
   `type: "image_url"` and a `data:image/...` URL. Text-only chat models can
-  still answer typed questions, but they cannot understand the sampled frame.
+  still answer typed questions when `OPENAI_CHAT_VISION_INPUT=disabled`, but
+  they cannot understand the sampled frame.
 
 Chat mode does not stream raw microphone audio to the model and does not ask
 the provider to generate audio tokens. Instead, supported browsers can use the

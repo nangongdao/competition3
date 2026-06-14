@@ -12,6 +12,9 @@ import {
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_CHAT_COMPLETIONS_PATH = "/chat/completions";
+const DEFAULT_CHAT_TOKEN_LIMIT_PARAMETER = "max_tokens";
+const DEFAULT_CHAT_VISION_INPUT = "enabled";
+const MAX_UPSTREAM_ERROR_SNIPPET_CHARS = 600;
 const DEFAULT_CHAT_INSTRUCTIONS =
   "You are a concise Chinese visual dialogue assistant. Answer the user's latest message using the supplied camera frame only when an image is included.";
 const BRIEF_RESPONSE_INSTRUCTION =
@@ -25,6 +28,8 @@ const RESPONSE_BUDGET_OUTPUT_TOKENS: Record<ChatResponseBudget, number> = {
 type ChatProviderConfig = {
   completionsUrl: string;
   model: string;
+  tokenLimitParameter: ChatTokenLimitParameter;
+  visionInput: ChatVisionInputMode;
 };
 
 type ChatTextContentPart = {
@@ -47,7 +52,20 @@ type ChatMessage = {
 type ChatCompletionPayload = {
   model: string;
   messages: ChatMessage[];
-  max_tokens: number;
+  max_tokens?: number;
+  max_completion_tokens?: number;
+};
+
+type ChatTokenLimitParameter =
+  | "max_tokens"
+  | "max_completion_tokens"
+  | "none";
+
+type ChatVisionInputMode = "enabled" | "disabled";
+
+type UpstreamResponseBody = {
+  value: unknown;
+  textSnippet: string | null;
 };
 
 export const chatRoutes = new Hono<AppEnv>();
@@ -89,20 +107,15 @@ chatRoutes.post("/completion", async (c) => {
   }
 
   const input = parseResult.data;
-  const payload: ChatCompletionPayload = {
+  const payload = buildChatCompletionPayload({
     model: providerConfig.model,
-    messages: [
-      {
-        role: "system",
-        content: buildChatInstructions(input.instructions, input.responseBudget),
-      },
-      {
-        role: "user",
-        content: buildUserContent(input.message, input.imageDataUrl),
-      },
-    ],
-    max_tokens: RESPONSE_BUDGET_OUTPUT_TOKENS[input.responseBudget],
-  };
+    instructions: input.instructions,
+    responseBudget: input.responseBudget,
+    message: input.message,
+    imageDataUrl:
+      providerConfig.visionInput === "enabled" ? input.imageDataUrl : undefined,
+    tokenLimitParameter: providerConfig.tokenLimitParameter,
+  });
 
   const upstreamResponse = await fetch(providerConfig.completionsUrl, {
     method: "POST",
@@ -112,7 +125,7 @@ chatRoutes.post("/completion", async (c) => {
     },
     body: JSON.stringify(payload),
   });
-  const upstreamBody = await readUpstreamJson(upstreamResponse);
+  const upstreamBody = await readUpstreamBody(upstreamResponse);
 
   if (!upstreamResponse.ok) {
     return c.json(createErrorResponse(
@@ -122,7 +135,7 @@ chatRoutes.post("/completion", async (c) => {
     ), 502);
   }
 
-  const answer = getChatAnswer(upstreamBody);
+  const answer = getChatAnswer(upstreamBody.value);
 
   if (answer === null) {
     return c.json(createErrorResponse(
@@ -134,7 +147,7 @@ chatRoutes.post("/completion", async (c) => {
   const response: ChatCompletionSuccessResponse = {
     success: true,
     answer,
-    model: getResponseModel(upstreamBody) ?? providerConfig.model,
+    model: getResponseModel(upstreamBody.value) ?? providerConfig.model,
   };
 
   return c.json(response);
@@ -179,7 +192,33 @@ function resolveChatProviderConfig(
   return {
     completionsUrl,
     model,
+    tokenLimitParameter: resolveChatTokenLimitParameter(
+      env.OPENAI_CHAT_TOKEN_LIMIT_PARAMETER,
+    ),
+    visionInput: resolveChatVisionInput(env.OPENAI_CHAT_VISION_INPUT),
   };
+}
+
+function resolveChatTokenLimitParameter(
+  value: string | undefined,
+): ChatTokenLimitParameter {
+  const normalizedValue = value?.trim().toLowerCase();
+
+  if (normalizedValue === "max_completion_tokens") {
+    return "max_completion_tokens";
+  }
+
+  if (normalizedValue === "none") {
+    return "none";
+  }
+
+  return DEFAULT_CHAT_TOKEN_LIMIT_PARAMETER;
+}
+
+function resolveChatVisionInput(value: string | undefined): ChatVisionInputMode {
+  return value?.trim().toLowerCase() === "disabled"
+    ? "disabled"
+    : DEFAULT_CHAT_VISION_INPUT;
 }
 
 function normalizeUrl(value: string | undefined): string | null {
@@ -223,6 +262,40 @@ function buildChatInstructions(
   return `${baseInstructions}\n${BRIEF_RESPONSE_INSTRUCTION}`;
 }
 
+function buildChatCompletionPayload(input: {
+  model: string;
+  instructions: string | undefined;
+  responseBudget: ChatResponseBudget;
+  message: string;
+  imageDataUrl: string | undefined;
+  tokenLimitParameter: ChatTokenLimitParameter;
+}): ChatCompletionPayload {
+  const payload: ChatCompletionPayload = {
+    model: input.model,
+    messages: [
+      {
+        role: "system",
+        content: buildChatInstructions(input.instructions, input.responseBudget),
+      },
+      {
+        role: "user",
+        content: buildUserContent(input.message, input.imageDataUrl),
+      },
+    ],
+  };
+  const outputTokenLimit = RESPONSE_BUDGET_OUTPUT_TOKENS[input.responseBudget];
+
+  if (input.tokenLimitParameter === "max_tokens") {
+    payload.max_tokens = outputTokenLimit;
+  }
+
+  if (input.tokenLimitParameter === "max_completion_tokens") {
+    payload.max_completion_tokens = outputTokenLimit;
+  }
+
+  return payload;
+}
+
 function buildUserContent(
   message: string,
   imageDataUrl: string | undefined,
@@ -259,15 +332,56 @@ async function readJsonBody(c: Context<AppEnv>): Promise<unknown> {
   }
 }
 
-async function readUpstreamJson(response: Response): Promise<unknown> {
+async function readUpstreamBody(response: Response): Promise<UpstreamResponseBody> {
+  const text = await response.text();
+
+  if (text.trim().length === 0) {
+    return {
+      value: null,
+      textSnippet: null,
+    };
+  }
+
   try {
-    return await response.json();
+    return {
+      value: JSON.parse(text) as unknown,
+      textSnippet: createTextSnippet(text),
+    };
   } catch {
-    return null;
+    return {
+      value: null,
+      textSnippet: createTextSnippet(text),
+    };
   }
 }
 
-function getUpstreamErrorMessage(value: unknown): string | undefined {
+function createTextSnippet(value: string): string | null {
+  const collapsedValue = value.replace(/\s+/g, " ").trim();
+
+  if (collapsedValue.length === 0) {
+    return null;
+  }
+
+  if (collapsedValue.length <= MAX_UPSTREAM_ERROR_SNIPPET_CHARS) {
+    return collapsedValue;
+  }
+
+  return `${collapsedValue.slice(0, MAX_UPSTREAM_ERROR_SNIPPET_CHARS)}...`;
+}
+
+function getUpstreamErrorMessage(body: UpstreamResponseBody): string | undefined {
+  const structuredMessage = getStructuredUpstreamErrorMessage(body.value);
+
+  if (structuredMessage !== undefined) {
+    return structuredMessage;
+  }
+
+  return body.textSnippet === null
+    ? undefined
+    : `Provider returned ${body.textSnippet}`;
+}
+
+function getStructuredUpstreamErrorMessage(value: unknown): string | undefined {
   if (typeof value !== "object" || value === null) {
     return undefined;
   }

@@ -683,3 +683,39 @@ Restored corrupted Chinese UI and hook messages, added a raw-source regression t
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: Fix Chat voice and provider compatibility
+
+**Date**: 2026-06-14
+**Task**: Fix Chat voice and provider compatibility
+**Branch**: `fix/voice-chat-errors`
+
+### Summary
+
+Improved Chat mode controls and browser speech error messaging, added third-party Chat Completions compatibility options for token-limit fields and vision input, documented the deployment variables, and opened PR #22.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3cba3a1` | (see git log) |
+| `90219bc` | (see git log) |
+| `eac0352` | (see git log) |
+| `726b7f9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

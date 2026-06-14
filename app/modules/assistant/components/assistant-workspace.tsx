@@ -364,13 +364,11 @@ export function AssistantWorkspace(): React.JSX.Element {
         : "麦克风已开启";
   const chatSpeechStatusLabel = !speechState.isRecognitionSupported
     ? "当前浏览器不支持语音识别"
-    : !hasMedia
-      ? "授权摄像头和麦克风后可使用语音输入"
-      : isChatSpeechListening
-        ? "正在听写，请说出你的问题"
-        : speechState.recognitionStatus === "error"
-          ? speechState.recognitionError ?? "语音识别异常"
-          : "可用语音输入填充 Chat 文本";
+    : isChatSpeechListening
+      ? "正在听写，请说出你的问题"
+      : speechState.recognitionStatus === "error"
+        ? speechState.recognitionError ?? "语音识别异常"
+        : "可用语音输入填充 Chat 文本；失败时仍可键盘输入";
   const costControls: readonly CostControlSetting[] = [
     {
       label: "提供方式",
@@ -1024,6 +1022,10 @@ export function AssistantWorkspace(): React.JSX.Element {
     realtimeState.status !== "creating-session" &&
     realtimeState.status !== "connecting" &&
     !hasRealtimeConnection;
+  const canUseSessionButton =
+    isChatMode
+      ? !isProviderConfigLoading && !chatState.isSending
+      : canStartSession;
   const canChangeTurnMode =
     isRealtimeMode &&
     !hasActiveSession &&
@@ -1049,7 +1051,6 @@ export function AssistantWorkspace(): React.JSX.Element {
     : hasRealtimeConnection;
   const canToggleChatSpeechInput =
     isChatMode &&
-    hasMedia &&
     speechState.isRecognitionSupported &&
     (!chatState.isSending || isChatSpeechListening);
   const canPushToTalk =
@@ -1082,8 +1083,16 @@ export function AssistantWorkspace(): React.JSX.Element {
     realtimeState.status === "connecting"
       ? "连接中"
       : isChatMode
-        ? "Chat 模式"
+        ? "直接提问"
         : "启动会话";
+  const pushToTalkLabel = isChatMode
+    ? "Realtime 专用"
+    : isPushToTalkActive
+      ? "松开提交"
+      : "按住说话";
+  const pushToTalkTitle = isChatMode
+    ? "按住说话只用于 Realtime 模式；Chat 模式请使用右侧语音输入或键盘输入。"
+    : "按住时发送麦克风音频，松开后提交给 Realtime 模型。";
 
   return (
     <main className="assistant-shell">
@@ -1137,7 +1146,7 @@ export function AssistantWorkspace(): React.JSX.Element {
             className="control-button"
             type="button"
             onClick={handleStartSession}
-            disabled={!canStartSession}
+            disabled={!canUseSessionButton}
           >
             <Play size={18} aria-hidden="true" />
             <span>{startSessionLabel}</span>
@@ -1153,10 +1162,11 @@ export function AssistantWorkspace(): React.JSX.Element {
             onKeyDown={handlePushToTalkKeyDown}
             onKeyUp={handlePushToTalkKeyUp}
             disabled={!canPushToTalk}
+            title={pushToTalkTitle}
             aria-pressed={isPushToTalkActive}
           >
             <Hand size={18} aria-hidden="true" />
-            <span>{isPushToTalkActive ? "松开提交" : "按住说话"}</span>
+            <span>{pushToTalkLabel}</span>
           </button>
 
           <button
