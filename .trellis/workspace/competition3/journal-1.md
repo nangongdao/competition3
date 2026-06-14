@@ -719,3 +719,36 @@ Improved Chat mode controls and browser speech error messaging, added third-part
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: Worker-backed Chat Speech Transcription
+
+**Date**: 2026-06-14
+**Task**: Worker-backed Chat Speech Transcription
+**Branch**: `feat/worker-backed-chat-speech-transcription`
+
+### Summary
+
+Added Worker-backed Chat voice transcription with Cloudflare runtime variables, frontend recording controls, tests, and deployment docs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `733da95` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
