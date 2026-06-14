@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 21
+- **Total Sessions**: 22
 - **Last Active**: 2026-06-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~721 | Active |
+| `journal-1.md` | ~754 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 22 | 2026-06-14 | Worker-backed speech chat | `bde9511` | `feat/worker-backed-speech-chat` |
 | 21 | 2026-06-14 | Fix Chat voice and provider compatibility | `3cba3a1`, `90219bc`, `eac0352`, `726b7f9` | `fix/voice-chat-errors` |
 | 20 | 2026-06-14 | Fix Chinese localized UI text | `a604a82`, `dfcaefe` | `fix/chinese-encoding-display` |
 | 19 | 2026-06-14 | Overall delivery readiness | `4289c6c`, `4cd7302` | `chore/record-overall-delivery-journal` |
