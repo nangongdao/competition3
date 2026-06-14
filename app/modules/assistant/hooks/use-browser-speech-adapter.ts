@@ -144,7 +144,7 @@ export function getRecognitionErrorMessage(errorCode: string | undefined): strin
   }
 
   if (errorCode === "network") {
-    return "语音识别服务网络异常。";
+    return "浏览器语音识别服务网络异常，请改用键盘输入，或更换浏览器/网络后重试。";
   }
 
   if (errorCode === "language-not-supported") {

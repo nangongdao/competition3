@@ -5,6 +5,10 @@ param(
   [string]$ChatCompletionsPath = "/chat/completions",
   [string]$ChatCompletionsUrl = "",
   [string]$ChatModel = "",
+  [ValidateSet("max_tokens", "max_completion_tokens", "none")]
+  [string]$ChatTokenLimitParameter = "max_tokens",
+  [ValidateSet("enabled", "disabled")]
+  [string]$ChatVisionInput = "enabled",
   [string]$Environment = "development",
   [switch]$NoStart
 )
@@ -65,6 +69,8 @@ Add-EnvLine $lines "OPENAI_CHAT_BASE_URL" $ChatBaseUrl
 Add-EnvLine $lines "OPENAI_CHAT_COMPLETIONS_PATH" $ChatCompletionsPath
 Add-EnvLine $lines "OPENAI_CHAT_COMPLETIONS_URL" $ChatCompletionsUrl
 Add-EnvLine $lines "OPENAI_CHAT_MODEL" $ChatModel
+Add-EnvLine $lines "OPENAI_CHAT_TOKEN_LIMIT_PARAMETER" $ChatTokenLimitParameter
+Add-EnvLine $lines "OPENAI_CHAT_VISION_INPUT" $ChatVisionInput
 
 $devVarsPath = Join-Path (Get-Location) ".dev.vars"
 [System.IO.File]::WriteAllLines($devVarsPath, $lines, [System.Text.UTF8Encoding]::new($false))

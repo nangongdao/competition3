@@ -130,4 +130,10 @@ describe("getRecognitionErrorMessage", () => {
       "语音识别失败。",
     );
   });
+
+  it("maps browser speech network failures to an actionable message", () => {
+    expect(getRecognitionErrorMessage("network")).toBe(
+      "浏览器语音识别服务网络异常，请改用键盘输入，或更换浏览器/网络后重试。",
+    );
+  });
 });
