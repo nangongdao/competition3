@@ -46,23 +46,23 @@ function isChatApiErrorResponse(value: unknown): value is ChatApiErrorResponse {
 
 function getLocalizedApiErrorMessage(errorResponse: ChatApiErrorResponse): string {
   if (errorResponse.code === "missing_openai_api_key") {
-    return "Worker ???? OPENAI_API_KEY????? Chat Completions?";
+    return "Worker 尚未配置 OPENAI_API_KEY，无法调用 Chat Completions。";
   }
 
   if (errorResponse.code === "missing_chat_model") {
-    return "Worker ???? OPENAI_CHAT_MODEL??????????????????? ID?";
+    return "Worker 尚未配置 OPENAI_CHAT_MODEL，请设置可用的视觉聊天模型 ID。";
   }
 
   if (errorResponse.code === "invalid_chat_provider_config") {
-    return "Chat Completions API ?????????? OPENAI_BASE_URL ? OPENAI_CHAT_COMPLETIONS_URL?";
+    return "Chat Completions API 地址配置无效，请检查 OPENAI_BASE_URL 或 OPENAI_CHAT_COMPLETIONS_URL。";
   }
 
   if (errorResponse.code === "invalid_request") {
-    return "Chat Completions ???????";
+    return "Chat Completions 请求内容无效。";
   }
 
   if (errorResponse.code === "chat_completion_failed") {
-    return `Chat Completions ?????${errorResponse.error}`;
+    return `Chat Completions 调用失败：${errorResponse.error}`;
   }
 
   return errorResponse.error;
@@ -76,10 +76,10 @@ async function readChatError(response: Response): Promise<string> {
       return getLocalizedApiErrorMessage(value);
     }
   } catch {
-    return `Chat Completions ???????? ${response.status}?`;
+    return `Chat Completions 请求失败，状态码 ${response.status}。`;
   }
 
-  return `Chat Completions ???????? ${response.status}?`;
+  return `Chat Completions 请求失败，状态码 ${response.status}。`;
 }
 
 export function useChatCompletion(): UseChatCompletionResult {
@@ -122,7 +122,7 @@ export function useChatCompletion(): UseChatCompletionResult {
         const value = (await response.json()) as unknown;
 
         if (!isChatCompletionSuccessResponse(value)) {
-          throw new Error("Chat Completions ??????????");
+          throw new Error("Chat Completions 返回格式不符合预期。");
         }
 
         setChatState({ isSending: false });
@@ -133,7 +133,7 @@ export function useChatCompletion(): UseChatCompletionResult {
           errorMessage:
             error instanceof Error && error.message.trim().length > 0
               ? error.message
-              : "Chat Completions ?????",
+              : "Chat Completions 请求失败。",
         });
 
         return null;

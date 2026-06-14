@@ -47,21 +47,21 @@ function createRecognitionResultList(
 describe("collectFinalRecognitionTranscript", () => {
   it("combines final recognition segments and trims whitespace", () => {
     const results = createRecognitionResultList([
-      createRecognitionResult(true, "  ???  "),
-      createRecognitionResult(true, "???"),
+      createRecognitionResult(true, "  你好  "),
+      createRecognitionResult(true, "世界"),
     ]);
 
-    expect(collectFinalRecognitionTranscript(results)).toBe("??? ???");
+    expect(collectFinalRecognitionTranscript(results)).toBe("你好 世界");
   });
 
   it("ignores interim and empty recognition results", () => {
     const results = createRecognitionResultList([
-      createRecognitionResult(false, "????"),
+      createRecognitionResult(false, "临时文本"),
       createRecognitionResult(true, "   "),
-      createRecognitionResult(true, "????"),
+      createRecognitionResult(true, "最终文本"),
     ]);
 
-    expect(collectFinalRecognitionTranscript(results)).toBe("????");
+    expect(collectFinalRecognitionTranscript(results)).toBe("最终文本");
   });
 });
 
@@ -121,13 +121,13 @@ describe("getBrowserSpeechSupport", () => {
 describe("getRecognitionErrorMessage", () => {
   it("maps permission denial to a specific Chinese message", () => {
     expect(getRecognitionErrorMessage("not-allowed")).toBe(
-      "?????????????",
+      "浏览器拒绝了语音识别权限。",
     );
   });
 
   it("maps unknown errors to a safe fallback", () => {
     expect(getRecognitionErrorMessage("unknown-code")).toBe(
-      "??????????",
+      "语音识别失败。",
     );
   });
 });
