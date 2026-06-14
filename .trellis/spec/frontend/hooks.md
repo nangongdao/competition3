@@ -647,9 +647,15 @@ type BrowserSpeechAdapterState = {
 - Typed messages in Chat mode call `/api/chat/completion` directly.
 - Visual questions in Chat mode capture one JPEG frame and send it as
   `imageDataUrl` with the user message.
+- The Worker may omit that `imageDataUrl` from the upstream provider payload
+  when `OPENAI_CHAT_VISION_INPUT=disabled`; the frontend request contract stays
+  unchanged.
 - Chat mode may use browser Web Speech APIs as a progressive enhancement:
   speech recognition fills the existing text composer, and speech synthesis
   reads returned text answers locally.
+- Chat-mode browser speech recognition does not require an active Realtime
+  session or an already-captured application `MediaStream`; the browser may ask
+  for microphone permission through its own Web Speech UI.
 - Chat-mode speech recognition must not send raw microphone audio to the
   Worker, provider, or Chat Completions model.
 - Chat-mode speech synthesis must not be represented as provider audio output;
@@ -670,7 +676,7 @@ type BrowserSpeechAdapterState = {
 | Chat failure | Move to error phase and keep media preview usable. |
 | User switches from Realtime to Chat while connected | Stop the Realtime connection before switching modes. |
 | Browser speech recognition unsupported | Disable Chat voice input or show an explanatory unsupported state. |
-| Browser speech recognition fails | Surface a localized status/error message and keep typed Chat input usable. |
+| Browser speech recognition fails | Surface a localized status/error message, explain browser-service network failures, and keep typed Chat input usable. |
 | Browser speech synthesis unsupported | Disable Chat answer auto-read without blocking text answers. |
 | User switches from Chat to Realtime while dictating or speaking | Stop dictation and cancel browser speech synthesis before switching modes. |
 
@@ -680,6 +686,8 @@ type BrowserSpeechAdapterState = {
   asks a camera-frame question without starting a Realtime session.
 - Good: supported browser dictation fills the existing Chat text composer; the
   user sends the recognized text through the normal Chat request path.
+- Base: typed Chat input works without camera/microphone authorization from the
+  app-level media preview.
 - Good: optional Chat answer reading uses browser `speechSynthesis` after the
   text answer has been appended to the transcript.
 - Base: user sends typed text with no media permission; Chat mode still works

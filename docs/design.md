@@ -94,7 +94,10 @@ image in 5, text in 4, text out 16, cached in 0.4):
   ordinary OpenAI-compatible Chat Completions base URL/path/full URL overrides
   and uses `OPENAI_CHAT_MODEL` for text plus optional `image_url` data URL
   requests. This is the broadest third-party provider path because it does not
-  require Realtime/WebRTC support.
+  require Realtime/WebRTC support. For stricter third-party providers, the
+  Worker can switch the output token parameter between `max_tokens`,
+  `max_completion_tokens`, or no explicit token limit, and can disable
+  multimodal image input for text-only chat models.
 * **Browser speech adapter for Chat mode (implemented)**: when the browser
   supports Web Speech APIs, Chat mode can turn microphone speech into text
   before sending the existing Chat request and can read returned text answers
@@ -189,7 +192,8 @@ The final demo package is documented in
   with a configured `OPENAI_API_KEY`; plain Vite dev mode does not provide the
   Worker API endpoint.
 * Chat Completions mode needs `OPENAI_CHAT_MODEL`; use a model that supports
-  image input if testing camera-frame understanding.
+  image input if testing camera-frame understanding, or set
+  `OPENAI_CHAT_VISION_INPUT=disabled` for text-only chat models.
 * Chat-mode speech input/playback depends on browser Web Speech API support and
   is a progressive enhancement, not a provider-side STT/TTS guarantee.
 * The measurement table above still needs live Realtime runs from an environment
