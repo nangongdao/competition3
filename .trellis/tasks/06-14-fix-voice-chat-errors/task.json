@@ -13,7 +13,7 @@
   "createdAt": "2026-06-14",
   "completedAt": null,
   "branch": "fix/voice-chat-errors",
-  "base_branch": "fix/chinese-encoding-display",
+  "base_branch": "main",
   "worktree_path": null,
   "commit": null,
   "pr_url": null,
