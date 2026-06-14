@@ -23,6 +23,7 @@ import { useChatCompletion } from "@/modules/assistant/hooks/use-chat-completion
 import { useBrowserSpeechAdapter } from "@/modules/assistant/hooks/use-browser-speech-adapter";
 import { useMediaCapture } from "@/modules/assistant/hooks/use-media-capture";
 import { useProviderConfig } from "@/modules/assistant/hooks/use-provider-config";
+import { useWorkerSpeechTranscription } from "@/modules/assistant/hooks/use-worker-speech-transcription";
 import {
   REALTIME_IDLE_DISCONNECT_MS,
   REALTIME_IDLE_WARNING_MS,
@@ -169,6 +170,22 @@ const providerModeOptions: readonly {
   },
 ] as const;
 
+type ChatVoiceSendMode = "auto-send" | "review";
+
+const chatVoiceSendModeOptions: readonly {
+  value: ChatVoiceSendMode;
+  label: string;
+}[] = [
+  {
+    value: "auto-send",
+    label: "自动发送",
+  },
+  {
+    value: "review",
+    label: "先填入",
+  },
+] as const;
+
 function formatEntryTime(timestamp: number): string {
   return new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
@@ -235,6 +252,8 @@ export function AssistantWorkspace(): React.JSX.Element {
     useState<RealtimeResponseMode>("audio-text");
   const [isChatAnswerSpeechEnabled, setIsChatAnswerSpeechEnabled] =
     useState(false);
+  const [chatVoiceSendMode, setChatVoiceSendMode] =
+    useState<ChatVoiceSendMode>("auto-send");
   const [textDraft, setTextDraft] = useState("");
   const nextEntryIdRef = useRef(initialTranscript.length);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -292,13 +311,21 @@ export function AssistantWorkspace(): React.JSX.Element {
 
   const {
     speechState,
-    startListening: startChatSpeechInput,
-    stopListening: stopChatSpeechInput,
     speak: speakChatAnswer,
     cancelSpeech: cancelChatSpeech,
   } = useBrowserSpeechAdapter({
     language: "zh-CN",
     onTranscript: handleChatSpeechTranscript,
+    onStatusMessage: handleBrowserSpeechStatus,
+  });
+  const {
+    transcriptionState,
+    startRecording: startChatVoiceRecording,
+    stopRecording: stopChatVoiceRecording,
+    cancelRecording: cancelChatVoiceRecording,
+  } = useWorkerSpeechTranscription({
+    stream,
+    language: "zh",
     onStatusMessage: handleBrowserSpeechStatus,
   });
 
@@ -327,7 +354,9 @@ export function AssistantWorkspace(): React.JSX.Element {
   const hasRealtimeConnection = realtimeState.status === "connected";
   const isChatMode = providerMode === "chat";
   const isRealtimeMode = providerMode === "realtime";
-  const isChatSpeechListening = speechState.recognitionStatus === "listening";
+  const isChatVoiceRecording = transcriptionState.status === "recording";
+  const isChatVoiceTranscribing = transcriptionState.status === "transcribing";
+  const isChatVoiceBusy = isChatVoiceRecording || isChatVoiceTranscribing;
   const usageExport = useMemo(() => {
     const generatedAt = Date.now();
 
@@ -352,23 +381,33 @@ export function AssistantWorkspace(): React.JSX.Element {
   const microphoneStatusLabel = !hasMedia
     ? "等待授权"
     : isChatMode
-      ? speechState.isRecognitionSupported
-        ? "可语音输入"
-        : "不支持语音"
-    : isMicrophoneMuted
-      ? "麦克风已静音"
-      : isPushToTalkMode
-        ? isPushToTalkActive
-          ? "正在说话"
-          : "按住说话"
-        : "麦克风已开启";
-  const chatSpeechStatusLabel = !speechState.isRecognitionSupported
-    ? "当前浏览器不支持语音识别"
-    : isChatSpeechListening
-      ? "正在听写，请说出你的问题"
-      : speechState.recognitionStatus === "error"
-        ? speechState.recognitionError ?? "语音识别异常"
-        : "可用语音输入填充 Chat 文本；失败时仍可键盘输入";
+      ? isChatVoiceRecording
+        ? "正在录音"
+        : isChatVoiceTranscribing
+          ? "正在转写"
+          : transcriptionState.isRecordingSupported
+            ? "可语音提问"
+            : "不支持录音"
+      : isMicrophoneMuted
+        ? "麦克风已静音"
+        : isPushToTalkMode
+          ? isPushToTalkActive
+            ? "正在说话"
+            : "按住说话"
+          : "麦克风已开启";
+  const chatSpeechStatusLabel = !transcriptionState.isRecordingSupported
+    ? "当前浏览器不支持本地录音，请改用键盘输入。"
+    : !hasMedia
+      ? "请先授权摄像头和麦克风，再使用语音提问。"
+      : isChatVoiceRecording
+        ? "正在录音，说完后点击停止并转写。"
+        : isChatVoiceTranscribing
+          ? "正在通过 Worker 转写语音。"
+          : transcriptionState.status === "error"
+            ? transcriptionState.errorMessage ?? "语音转写异常。"
+            : chatVoiceSendMode === "auto-send"
+              ? "录音会先转文字，再自动发送到 Chat。"
+              : "录音会先转文字，并填入输入框供你确认。";
   const costControls: readonly CostControlSetting[] = [
     {
       label: "提供方式",
@@ -438,12 +477,12 @@ export function AssistantWorkspace(): React.JSX.Element {
     {
       label: "轮次触发",
       value: isChatMode
-        ? speechState.isRecognitionSupported
-          ? "浏览器听写"
+        ? transcriptionState.isRecordingSupported
+          ? "Worker 转写"
           : "键盘输入"
         : turnDetectionLabels[activeTurnDetectionMode],
       detail: isChatMode
-        ? "浏览器语音识别只生成文本，再发送 Chat 请求"
+        ? "浏览器录制短音频，Worker 转成文字后再发送 Chat 请求"
         : activeTurnDetectionMode === "push-to-talk"
           ? "按住按钮时采集麦克风，松开后提交"
           : "服务端 VAD 自动判断用户说话结束",
@@ -452,10 +491,10 @@ export function AssistantWorkspace(): React.JSX.Element {
       label: "麦克风",
       value: microphoneStatusLabel,
       detail: isChatMode
-        ? "Chat 模式不向 Worker 上传原始麦克风音频"
+        ? "仅在语音提问时上传一段短录音用于转写"
         : isMicrophoneMuted
-        ? "当前不会发送麦克风音频"
-        : "音频通过 Realtime 会话发送",
+          ? "当前不会发送麦克风音频"
+          : "音频通过 Realtime 会话发送",
     },
     {
       label: "帧差阈值",
@@ -702,6 +741,7 @@ export function AssistantWorkspace(): React.JSX.Element {
   };
 
   const handleReleaseMedia = (): void => {
+    cancelChatVoiceRecording();
     stopSession();
     stopAccess();
     setIsAutoSampling(false);
@@ -736,10 +776,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     }
 
     if (nextProviderMode === "realtime") {
-      if (isChatSpeechListening) {
-        stopChatSpeechInput();
-      }
-
+      cancelChatVoiceRecording();
       cancelChatSpeech();
     }
 
@@ -893,13 +930,55 @@ export function AssistantWorkspace(): React.JSX.Element {
   };
 
   const handleChatSpeechInputClick = (): void => {
-    if (isChatSpeechListening) {
-      stopChatSpeechInput();
-      addTranscript("system", "已停止 Chat 语音输入。");
+    if (isChatVoiceRecording) {
+      void (async (): Promise<void> => {
+        addTranscript("system", "已停止录音，正在转写语音。");
+        const transcription = await stopChatVoiceRecording();
+
+        if (transcription === null) {
+          return;
+        }
+
+        const recognizedText = transcription.text.trim();
+
+        if (recognizedText.length === 0) {
+          addTranscript("system", "语音转写结果为空，请再试一次。");
+          return;
+        }
+
+        if (chatVoiceSendMode === "review") {
+          setTextDraft((currentDraft) => {
+            const trimmedCurrentDraft = currentDraft.trim();
+
+            if (trimmedCurrentDraft.length === 0) {
+              return recognizedText;
+            }
+
+            return `${trimmedCurrentDraft} ${recognizedText}`;
+          });
+          addTranscript("system", "语音已转写并填入输入框。");
+          return;
+        }
+
+        addTranscript("user", recognizedText);
+        await sendChatTurn({ message: recognizedText });
+      })();
       return;
     }
 
-    startChatSpeechInput();
+    startChatVoiceRecording();
+  };
+
+  const handleChatVoiceSendModeChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): void => {
+    const nextMode = event.currentTarget.value;
+
+    if (nextMode !== "auto-send" && nextMode !== "review") {
+      return;
+    }
+
+    setChatVoiceSendMode(nextMode);
   };
 
   const handleChatAnswerSpeechChange = (
@@ -1024,7 +1103,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     !hasRealtimeConnection;
   const canUseSessionButton =
     isChatMode
-      ? !isProviderConfigLoading && !chatState.isSending
+      ? !isProviderConfigLoading && !chatState.isSending && !isChatVoiceBusy
       : canStartSession;
   const canChangeTurnMode =
     isRealtimeMode &&
@@ -1035,24 +1114,26 @@ export function AssistantWorkspace(): React.JSX.Element {
   const canChangeProviderMode =
     !isProviderConfigLoading &&
     !chatState.isSending &&
-    !isChatSpeechListening &&
+    !isChatVoiceBusy &&
     realtimeState.status !== "creating-session" &&
     realtimeState.status !== "connecting";
   const canChangeResponseBudget = isChatMode
-    ? !chatState.isSending
+    ? !chatState.isSending && !isChatVoiceBusy
     : canChangeTurnMode;
   const canRealtimeTurn =
     isRealtimeMode && assistantPhase === "listening" && hasRealtimeConnection;
   const canVisualQuestion = isChatMode
-    ? hasMedia && !chatState.isSending
+    ? hasMedia && !chatState.isSending && !isChatVoiceBusy
     : canRealtimeTurn;
   const canSendTextMessage = isChatMode
-    ? !chatState.isSending
+    ? !chatState.isSending && !isChatVoiceBusy
     : hasRealtimeConnection;
   const canToggleChatSpeechInput =
     isChatMode &&
-    speechState.isRecognitionSupported &&
-    (!chatState.isSending || isChatSpeechListening);
+    transcriptionState.isRecordingSupported &&
+    hasMedia &&
+    !isChatVoiceTranscribing &&
+    (!chatState.isSending || isChatVoiceRecording);
   const canPushToTalk =
     isRealtimeMode &&
     assistantPhase === "listening" &&
@@ -1068,11 +1149,14 @@ export function AssistantWorkspace(): React.JSX.Element {
     mediaState.errorMessage ??
     providerConfigError ??
     realtimeState.errorMessage ??
+    transcriptionState.errorMessage ??
     chatState.errorMessage;
   const providerDetail = isChatMode
-    ? chatState.isSending
-      ? "正在通过 HTTP 请求 Chat Completions"
-      : "使用 Chat Completions：无需 Realtime/WebRTC 会话"
+    ? isChatVoiceTranscribing
+      ? "正在通过 Worker 转写语音"
+      : chatState.isSending
+        ? "正在通过 HTTP 请求 Chat Completions"
+        : "使用 Chat Completions：无需 Realtime/WebRTC 会话"
     : hasRealtimeConnection
       ? "Realtime 连接已建立"
       : realtimeState.peerConnectionState === null
@@ -1255,15 +1339,35 @@ export function AssistantWorkspace(): React.JSX.Element {
                   type="button"
                   onClick={handleChatSpeechInputClick}
                   disabled={!canToggleChatSpeechInput}
-                  aria-pressed={isChatSpeechListening}
+                  aria-pressed={isChatVoiceRecording}
                 >
-                  {isChatSpeechListening ? (
+                  {isChatVoiceRecording ? (
                     <MicOff size={16} aria-hidden="true" />
                   ) : (
                     <Mic size={16} aria-hidden="true" />
                   )}
-                  <span>{isChatSpeechListening ? "停止听写" : "语音输入"}</span>
+                  <span>{isChatVoiceRecording ? "停止转写" : "语音提问"}</span>
                 </button>
+                <fieldset
+                  className="mode-segment"
+                  disabled={isChatVoiceBusy || chatState.isSending}
+                >
+                  <legend>发送模式</legend>
+                  <div>
+                    {chatVoiceSendModeOptions.map((option) => (
+                      <label key={option.value}>
+                        <input
+                          type="radio"
+                          name="chat-voice-send-mode"
+                          value={option.value}
+                          checked={chatVoiceSendMode === option.value}
+                          onChange={handleChatVoiceSendModeChange}
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
                 <span>{chatSpeechStatusLabel}</span>
               </div>
             ) : (

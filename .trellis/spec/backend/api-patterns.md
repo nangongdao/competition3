@@ -304,6 +304,124 @@ await fetch("/api/realtime/session", {
 });
 ```
 
+### Scenario: Chat Voice Transcription Endpoint
+
+#### 1. Scope / Trigger
+
+- Trigger: adding or changing a backend endpoint that accepts short browser
+  recordings and calls an OpenAI-compatible audio transcription provider.
+- This is the provider-compatible STT path for Chat mode; it must not require
+  Realtime/WebRTC support.
+
+#### 2. Signatures
+
+- Route: `POST /api/speech/transcription`
+- Request content type: `multipart/form-data`
+- Request schema source: `src/worker/routes/speech/types.ts`
+- Hono app mount: `app.route("/api/speech", speechRoutes)`
+
+#### 3. Contracts
+
+Request form data:
+
+| Field | Type | Required | Constraints |
+| --- | --- | :---: | --- |
+| `audio` | `File` | Yes | Non-empty, max 10 MB, supported `audio/*` MIME type |
+| `language` | `string` | No | Trimmed, 1 to 16 chars; overrides env language when present |
+
+Success response:
+
+```typescript
+{
+  success: true,
+  text: string,
+  model: string,
+}
+```
+
+Environment:
+
+| Key | Required | Notes |
+| --- | :---: | --- |
+| `OPENAI_API_KEY` | Yes for real calls | Worker secret or `.dev.vars`; never a frontend variable |
+| `OPENAI_BASE_URL` | No | Shared provider root, default `https://api.openai.com/v1` |
+| `OPENAI_TRANSCRIPTION_BASE_URL` | No | Transcription-specific provider root override |
+| `OPENAI_TRANSCRIPTIONS_PATH` | No | Defaults to `/audio/transcriptions` |
+| `OPENAI_TRANSCRIPTIONS_URL` | No | Full endpoint override when base plus path cannot represent provider routing. A non-empty value takes precedence over base/path and must itself be a valid absolute URL. |
+| `OPENAI_TRANSCRIPTION_MODEL` | No | Defaults to `whisper-1` |
+| `OPENAI_TRANSCRIPTION_LANGUAGE` | No | Optional provider language hint; request `language` takes precedence |
+
+Upstream payload:
+
+- Multipart form data with `model`, `file`, `response_format=json`, and
+  optional `language`.
+- Do not set the multipart `Content-Type` header manually; let `fetch` attach
+  the boundary.
+
+#### 4. Validation & Error Matrix
+
+| Condition | Status | Response |
+| --- | ---: | --- |
+| Missing `OPENAI_API_KEY` | 503 | `{ success: false, code: "missing_openai_api_key" }` |
+| Invalid transcription provider URL config | 503 | `{ success: false, code: "invalid_transcription_provider_config" }` |
+| Non-multipart request | 400 | `{ success: false, code: "invalid_audio_upload" }` |
+| Missing, empty, too-large, or unsupported audio upload | 400/413 | `{ success: false, code: "invalid_audio_upload" }` |
+| Invalid language hint | 400 | `{ success: false, code: "invalid_audio_upload" }` |
+| Provider request failure | 502 | `{ success: false, code: "transcription_failed" }` |
+| Provider response lacks non-empty `text` | 502 | `{ success: false, code: "invalid_transcription_response" }` |
+| Provider success | 200 | `{ success: true, text, model }` |
+
+#### 5. Good/Base/Bad Cases
+
+- Good: browser records a short utterance, posts it to the same-origin Worker,
+  and receives normalized transcript text without exposing provider secrets.
+- Base: `OPENAI_TRANSCRIPTION_MODEL` is unset; the Worker uses `whisper-1`.
+- Base: the request supplies `language=zh`; that value is forwarded upstream
+  instead of the optional env language.
+- Base: a valid `OPENAI_TRANSCRIPTIONS_URL` is enough to route the upstream
+  request even when `OPENAI_BASE_URL` is unset or invalid, because base/path is
+  not used in full-URL override mode.
+- Bad: browser code calls the transcription provider directly with a permanent
+  API key.
+- Bad: Worker forwards unbounded file uploads or accepts arbitrary non-audio
+  files.
+
+#### 6. Tests Required
+
+- Missing key maps to 503.
+- Invalid provider URL configuration maps to 503.
+- Invalid non-empty `OPENAI_TRANSCRIPTIONS_URL` maps to 503 instead of silently
+  falling back to base/path.
+- Non-multipart, empty, and unsupported uploads map to `invalid_audio_upload`.
+- Mocked provider failure maps to 502 and surfaces provider error text.
+- Mocked provider success asserts upstream URL, authorization header, model,
+  `response_format=json`, optional language, and file payload.
+- Mocked provider response without text maps to
+  `invalid_transcription_response`.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+
+```typescript
+await fetch("https://api.example/v1/audio/transcriptions", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+  },
+  body: formData,
+});
+```
+
+Correct:
+
+```typescript
+await fetch("/api/speech/transcription", {
+  method: "POST",
+  body: formData,
+});
+```
+
 ### 1. Create Operation
 
 ```typescript
