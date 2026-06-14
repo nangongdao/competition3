@@ -9,6 +9,10 @@ param(
   [string]$ChatTokenLimitParameter = "max_tokens",
   [ValidateSet("enabled", "disabled")]
   [string]$ChatVisionInput = "enabled",
+  [string]$TranscriptionsPath = "/audio/transcriptions",
+  [string]$TranscriptionsUrl = "",
+  [string]$TranscriptionModel = "whisper-1",
+  [string]$TranscriptionLanguage = "zh",
   [string]$Environment = "development",
   [switch]$NoStart
 )
@@ -71,6 +75,10 @@ Add-EnvLine $lines "OPENAI_CHAT_COMPLETIONS_URL" $ChatCompletionsUrl
 Add-EnvLine $lines "OPENAI_CHAT_MODEL" $ChatModel
 Add-EnvLine $lines "OPENAI_CHAT_TOKEN_LIMIT_PARAMETER" $ChatTokenLimitParameter
 Add-EnvLine $lines "OPENAI_CHAT_VISION_INPUT" $ChatVisionInput
+Add-EnvLine $lines "OPENAI_TRANSCRIPTIONS_PATH" $TranscriptionsPath
+Add-EnvLine $lines "OPENAI_TRANSCRIPTIONS_URL" $TranscriptionsUrl
+Add-EnvLine $lines "OPENAI_TRANSCRIPTION_MODEL" $TranscriptionModel
+Add-EnvLine $lines "OPENAI_TRANSCRIPTION_LANGUAGE" $TranscriptionLanguage
 
 $devVarsPath = Join-Path (Get-Location) ".dev.vars"
 [System.IO.File]::WriteAllLines($devVarsPath, $lines, [System.Text.UTF8Encoding]::new($false))

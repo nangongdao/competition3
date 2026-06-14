@@ -27,6 +27,9 @@ server side.
   context events.
 * Chat transport: browser sends text plus an optional sampled JPEG frame to the
   Worker, which calls the configured Chat Completions endpoint over HTTP.
+* Chat voice input: browser records a short microphone utterance, posts it to
+  the Worker transcription endpoint, and then uses the recognized text with the
+  existing Chat Completions path.
 
 ## User Stories
 
@@ -41,7 +44,7 @@ server side.
 | Create a key-safe AI session | Implemented | `POST /api/realtime/session` creates a server-side Realtime session when `OPENAI_API_KEY` is configured. Provider URLs can target OpenAI or a third-party Realtime-compatible API. |
 | Use third-party Chat Completions providers | Implemented | `POST /api/chat/completion` lets the browser send text and optional sampled frames through the Worker to an OpenAI-compatible Chat Completions provider. |
 | Pick the provider protocol | Implemented | `/api/provider/config` exposes the non-secret default mode, and the workspace can switch between Chat Completions compatibility and Realtime. |
-| Use voice-style interaction in Chat mode | Implemented | Supported browsers can use speech recognition to fill the Chat text composer and speech synthesis to read Chat answers aloud. |
+| Use voice-style interaction in Chat mode | Implemented | Supported browsers can record a short utterance; the Worker transcribes it through an OpenAI-compatible endpoint and then auto-sends it to Chat or fills the text composer for review. Browser speech synthesis can still read Chat answers aloud. |
 | Stream low-latency voice to the model | Implemented | The browser posts an SDP offer with the short-lived client secret and plays the remote audio stream. |
 | Avoid noisy-room voice false positives | Implemented | The session can run in push-to-talk mode, which disables server VAD and commits audio only after the user releases the hold control. |
 | Mute the microphone during a live session | Implemented | The workspace toggles the local audio track with `MediaStreamTrack.enabled` without renegotiating WebRTC. |
@@ -98,12 +101,15 @@ image in 5, text in 4, text out 16, cached in 0.4):
   Worker can switch the output token parameter between `max_tokens`,
   `max_completion_tokens`, or no explicit token limit, and can disable
   multimodal image input for text-only chat models.
-* **Browser speech adapter for Chat mode (implemented)**: when the browser
-  supports Web Speech APIs, Chat mode can turn microphone speech into text
-  before sending the existing Chat request and can read returned text answers
-  through browser speech synthesis. This does not send raw microphone audio to
-  the Worker/model and does not create provider audio-output tokens; support
-  and quality depend on the local browser/OS.
+* **Worker-backed speech transcription for Chat mode (implemented)**: when the
+  browser supports `MediaRecorder`, Chat mode records a short microphone
+  utterance and sends it to `/api/speech/transcription`. The Worker forwards
+  the audio to an OpenAI-compatible transcription endpoint, returns normalized
+  text, and the workspace either auto-sends that text to Chat or fills the text
+  composer for review. This avoids browser-vendor Web Speech recognition
+  network failures while keeping permanent API keys and provider routing on the
+  Worker. Optional answer reading still uses browser speech synthesis and does
+  not create provider audio-output tokens.
 * **Compact default instructions (implemented)**: the Worker sends a short
   default Realtime instruction block.
 * **Local fallback (implemented)**: without `OPENAI_API_KEY`, the media
@@ -194,8 +200,10 @@ The final demo package is documented in
 * Chat Completions mode needs `OPENAI_CHAT_MODEL`; use a model that supports
   image input if testing camera-frame understanding, or set
   `OPENAI_CHAT_VISION_INPUT=disabled` for text-only chat models.
-* Chat-mode speech input/playback depends on browser Web Speech API support and
-  is a progressive enhancement, not a provider-side STT/TTS guarantee.
+* Chat-mode speech input depends on browser `MediaRecorder` support and a
+  provider/model that supports `/audio/transcriptions` or the configured
+  equivalent. Spoken answer playback still depends on browser speech synthesis
+  and is not provider-side TTS.
 * The measurement table above still needs live Realtime runs from an environment
   with `OPENAI_API_KEY`; this local development environment did not expose the
   key.
