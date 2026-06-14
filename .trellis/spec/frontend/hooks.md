@@ -794,6 +794,16 @@ type UseWorkerSpeechTranscriptionResult = {
 - Do not set `Content-Type` manually for multipart requests.
 - The hook returns normalized Worker responses; the component decides whether
   to auto-send transcript text to Chat or fill the composer for review.
+- Continuous Chat voice loops belong in the component layer, not the Worker
+  contract: record one short utterance, stop on local silence/max-duration,
+  transcribe, send text through the existing Chat request, optionally await
+  local browser speech synthesis, then start the next recording only if the
+  user has not stopped the loop.
+- Continuous mode must expose an explicit stop control that cancels pending
+  restart timers and active local recording without stopping the camera stream.
+- Do not start the next continuous recording while transcription, Chat
+  completion, or local answer speech synthesis is still active; otherwise the
+  app can record its own spoken answer as the next user prompt.
 - Permanent provider keys, base URLs, and model IDs must never be exposed in
   frontend state, `VITE_*`, localStorage, or query parameters.
 - Switching away from Chat mode or releasing media should cancel active
@@ -811,6 +821,9 @@ type UseWorkerSpeechTranscriptionResult = {
 | Worker returns 503 `missing_openai_api_key` | Tell the user the Worker needs `OPENAI_TRANSCRIPTION_API_KEY` or fallback `OPENAI_API_KEY`; do not suggest a browser-side key setting |
 | Worker returns non-JSON or invalid success shape | Show a localized transcription contract error that hints the user may be on the Vite preview URL instead of the Worker URL. Do not surface raw `Unexpected token '<'` JSON parser text. |
 | Transcription succeeds | Return `{ success: true, text, model }` to the component |
+| Continuous mode is stopped mid-recording | Cancel local recording and do not submit a partial turn |
+| Continuous mode is stopped during transcription or Chat response | Finish safe cleanup but do not schedule another recording |
+| Browser speech synthesis is active in continuous mode | Wait for `onend` or cancellation before starting the next recording |
 
 ### 5. Good/Base/Bad Cases
 
@@ -818,6 +831,8 @@ type UseWorkerSpeechTranscriptionResult = {
   the component auto-sends the recognized text through `/api/chat/completion`.
 - Good: review mode inserts transcript text into the existing composer without
   spending Chat tokens until the user sends.
+- Good: continuous mode auto-sends one transcribed utterance, speaks the answer
+  locally where supported, and only then records the next utterance.
 - Base: typed Chat remains available when recording is unsupported or
   transcription fails.
 - Base: transcription can use a dedicated Worker secret
@@ -825,6 +840,9 @@ type UseWorkerSpeechTranscriptionResult = {
 - Bad: the component sends raw audio to `/api/chat/completion`.
 - Bad: the browser calls the upstream transcription provider directly or embeds
   provider routing in frontend code.
+- Bad: a continuous voice loop restarts recording immediately after scheduling
+  answer speech, causing the browser to capture the assistant's own spoken
+  response.
 
 ### 6. Tests Required
 
@@ -834,7 +852,8 @@ type UseWorkerSpeechTranscriptionResult = {
 - Typecheck must verify frontend imports backend response types through
   type-only imports.
 - Manual browser smoke test should cover auto-send mode, review mode,
-  microphone permission failure, and typed Chat fallback.
+  continuous mode start/stop, microphone permission failure, and typed Chat
+  fallback.
 
 ### 7. Wrong vs Correct
 

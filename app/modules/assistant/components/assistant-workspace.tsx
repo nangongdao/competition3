@@ -186,6 +186,45 @@ const chatVoiceSendModeOptions: readonly {
   },
 ] as const;
 
+type ChatVoiceCompletionSource = "manual" | "continuous";
+
+const CONTINUOUS_CHAT_AUDIO_LEVEL_POLL_MS = 100;
+const CONTINUOUS_CHAT_MIN_RECORDING_MS = 900;
+const CONTINUOUS_CHAT_SILENCE_MS = 1_100;
+const CONTINUOUS_CHAT_MAX_RECORDING_MS = 12_000;
+const CONTINUOUS_CHAT_RESTART_DELAY_MS = 350;
+const CONTINUOUS_CHAT_SPEECH_THRESHOLD = 0.035;
+
+type AudioContextConstructor = typeof AudioContext;
+type BrowserAudioContextScope = Window & {
+  webkitAudioContext?: AudioContextConstructor;
+};
+
+function getAudioContextConstructor(): AudioContextConstructor | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const scope = window as BrowserAudioContextScope;
+
+  if (typeof AudioContext !== "undefined") {
+    return AudioContext;
+  }
+
+  return scope.webkitAudioContext ?? null;
+}
+
+function calculateAudioRootMeanSquare(samples: Uint8Array): number {
+  let squaredTotal = 0;
+
+  for (const sample of samples) {
+    const normalizedSample = (sample - 128) / 128;
+    squaredTotal += normalizedSample * normalizedSample;
+  }
+
+  return Math.sqrt(squaredTotal / samples.length);
+}
+
 function formatEntryTime(timestamp: number): string {
   return new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
@@ -252,6 +291,8 @@ export function AssistantWorkspace(): React.JSX.Element {
     useState<RealtimeResponseMode>("audio-text");
   const [isChatAnswerSpeechEnabled, setIsChatAnswerSpeechEnabled] =
     useState(false);
+  const [isContinuousChatVoiceEnabled, setIsContinuousChatVoiceEnabled] =
+    useState(false);
   const [chatVoiceSendMode, setChatVoiceSendMode] =
     useState<ChatVoiceSendMode>("auto-send");
   const [textDraft, setTextDraft] = useState("");
@@ -260,6 +301,9 @@ export function AssistantWorkspace(): React.JSX.Element {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastUploadedFrameSignatureRef = useRef<FrameSignature | null>(null);
+  const continuousChatVoiceRef = useRef(false);
+  const continuousChatRestartTimeoutRef = useRef<number | null>(null);
+  const isCompletingChatVoiceRef = useRef(false);
 
   const hasMedia = mediaState.status === "granted" && stream !== null;
   const hasActiveSession = isActiveSession(assistantPhase);
@@ -381,7 +425,17 @@ export function AssistantWorkspace(): React.JSX.Element {
   const microphoneStatusLabel = !hasMedia
     ? "等待授权"
     : isChatMode
-      ? isChatVoiceRecording
+      ? isContinuousChatVoiceEnabled
+        ? isChatVoiceRecording
+          ? "连续聆听"
+          : isChatVoiceTranscribing
+            ? "正在转写"
+            : chatState.isSending
+              ? "等待回答"
+              : speechState.isSpeaking
+                ? "正在朗读"
+                : "连续待命"
+      : isChatVoiceRecording
         ? "正在录音"
         : isChatVoiceTranscribing
           ? "正在转写"
@@ -399,15 +453,25 @@ export function AssistantWorkspace(): React.JSX.Element {
     ? "当前浏览器不支持本地录音，请改用键盘输入。"
     : !hasMedia
       ? "请先授权摄像头和麦克风，再使用语音提问。"
-      : isChatVoiceRecording
-        ? "正在录音，说完后点击停止并转写。"
-        : isChatVoiceTranscribing
-          ? "正在通过 Worker 转写语音。"
-          : transcriptionState.status === "error"
-            ? transcriptionState.errorMessage ?? "语音转写异常。"
-            : chatVoiceSendMode === "auto-send"
-              ? "录音会先转文字，再自动发送到 Chat。"
-              : "录音会先转文字，并填入输入框供你确认。";
+      : isContinuousChatVoiceEnabled
+        ? isChatVoiceRecording
+          ? "连续对话正在听你说话，说完会自动转写。"
+          : isChatVoiceTranscribing
+            ? "连续对话正在通过 Worker 转写语音。"
+            : chatState.isSending
+              ? "连续对话正在等待模型回答。"
+              : speechState.isSpeaking
+                ? "正在朗读回答，结束后会继续听你说话。"
+                : "连续语音对话已开启。"
+        : isChatVoiceRecording
+          ? "正在录音，说完后点击停止并转写。"
+          : isChatVoiceTranscribing
+            ? "正在通过 Worker 转写语音。"
+            : transcriptionState.status === "error"
+              ? transcriptionState.errorMessage ?? "语音转写异常。"
+              : chatVoiceSendMode === "auto-send"
+                ? "录音会先转文字，再自动发送到 Chat。"
+                : "录音会先转文字，并填入输入框供你确认。";
   const costControls: readonly CostControlSetting[] = [
     {
       label: "提供方式",
@@ -459,7 +523,9 @@ export function AssistantWorkspace(): React.JSX.Element {
     {
       label: "输出模式",
       value: isChatMode
-        ? isChatAnswerSpeechEnabled
+        ? isContinuousChatVoiceEnabled
+          ? "文本+连续朗读"
+          : isChatAnswerSpeechEnabled
           ? "文本+本机朗读"
           : "文本"
         : responseModeLabels[responseMode],
@@ -477,7 +543,9 @@ export function AssistantWorkspace(): React.JSX.Element {
     {
       label: "轮次触发",
       value: isChatMode
-        ? transcriptionState.isRecordingSupported
+        ? isContinuousChatVoiceEnabled
+          ? "连续 Worker 转写"
+          : transcriptionState.isRecordingSupported
           ? "Worker 转写"
           : "键盘输入"
         : turnDetectionLabels[activeTurnDetectionMode],
@@ -598,7 +666,9 @@ export function AssistantWorkspace(): React.JSX.Element {
       message: string;
       imageDataUrl?: string;
       signature?: FrameSignature;
-    }): Promise<void> => {
+      awaitSpeech?: boolean;
+      forceSpeech?: boolean;
+    }): Promise<boolean> => {
       setAssistantPhase("thinking");
 
       const response = await sendChatCompletion({
@@ -612,7 +682,7 @@ export function AssistantWorkspace(): React.JSX.Element {
       if (response === null) {
         setAssistantPhase("error");
         addTranscript("system", "Chat Completions 请求失败，请检查配置或稍后重试。");
-        return;
+        return false;
       }
 
       if (input.signature !== undefined) {
@@ -620,10 +690,17 @@ export function AssistantWorkspace(): React.JSX.Element {
       }
 
       addTranscript("assistant", response.answer);
-      if (isChatAnswerSpeechEnabled) {
-        speakChatAnswer(response.answer);
+      if (input.forceSpeech === true || isChatAnswerSpeechEnabled) {
+        const speechResult = speakChatAnswer(response.answer);
+
+        if (input.awaitSpeech === true) {
+          await speechResult;
+        } else {
+          void speechResult;
+        }
       }
       setAssistantPhase(mediaState.status === "granted" ? "ready" : "idle");
+      return true;
     },
     [
       addTranscript,
@@ -635,6 +712,211 @@ export function AssistantWorkspace(): React.JSX.Element {
       speakChatAnswer,
     ],
   );
+
+  const clearContinuousChatRestart = useCallback((): void => {
+    if (continuousChatRestartTimeoutRef.current !== null) {
+      window.clearTimeout(continuousChatRestartTimeoutRef.current);
+      continuousChatRestartTimeoutRef.current = null;
+    }
+  }, []);
+
+  const disableContinuousChatVoice = useCallback((): void => {
+    continuousChatVoiceRef.current = false;
+    setIsContinuousChatVoiceEnabled(false);
+    clearContinuousChatRestart();
+  }, [clearContinuousChatRestart]);
+
+  const scheduleNextContinuousRecording = useCallback((): void => {
+    clearContinuousChatRestart();
+
+    if (!continuousChatVoiceRef.current) {
+      return;
+    }
+
+    continuousChatRestartTimeoutRef.current = window.setTimeout(() => {
+      continuousChatRestartTimeoutRef.current = null;
+
+      if (!continuousChatVoiceRef.current) {
+        return;
+      }
+
+      const started = startChatVoiceRecording();
+
+      if (!started) {
+        disableContinuousChatVoice();
+        addTranscript("system", "连续语音对话已停止。");
+      }
+    }, CONTINUOUS_CHAT_RESTART_DELAY_MS);
+  }, [
+    addTranscript,
+    clearContinuousChatRestart,
+    disableContinuousChatVoice,
+    startChatVoiceRecording,
+  ]);
+
+  const completeChatVoiceRecording = useCallback(
+    async (source: ChatVoiceCompletionSource): Promise<void> => {
+      if (isCompletingChatVoiceRef.current) {
+        return;
+      }
+
+      isCompletingChatVoiceRef.current = true;
+
+      try {
+        if (source === "manual") {
+          addTranscript("system", "已停止录音，正在转写语音。");
+        }
+
+        const transcription = await stopChatVoiceRecording();
+
+        if (transcription === null) {
+          if (source === "continuous" && continuousChatVoiceRef.current) {
+            disableContinuousChatVoice();
+            addTranscript("system", "连续语音对话已停止。");
+          }
+          return;
+        }
+
+        const recognizedText = transcription.text.trim();
+
+        if (recognizedText.length === 0) {
+          addTranscript("system", "语音转写结果为空，请再试一次。");
+
+          if (source === "continuous" && continuousChatVoiceRef.current) {
+            disableContinuousChatVoice();
+            addTranscript("system", "连续语音对话已停止。");
+          }
+          return;
+        }
+
+        if (source === "continuous" && !continuousChatVoiceRef.current) {
+          return;
+        }
+
+        if (source === "manual" && chatVoiceSendMode === "review") {
+          setTextDraft((currentDraft) => {
+            const trimmedCurrentDraft = currentDraft.trim();
+
+            if (trimmedCurrentDraft.length === 0) {
+              return recognizedText;
+            }
+
+            return `${trimmedCurrentDraft} ${recognizedText}`;
+          });
+          addTranscript("system", "语音已转写并填入输入框。");
+          return;
+        }
+
+        const shouldContinue =
+          source === "continuous" && continuousChatVoiceRef.current;
+        addTranscript("user", recognizedText);
+        const sent = await sendChatTurn({
+          message: recognizedText,
+          awaitSpeech: shouldContinue,
+          forceSpeech: shouldContinue,
+        });
+
+        if (!sent) {
+          if (shouldContinue) {
+            disableContinuousChatVoice();
+            addTranscript("system", "连续语音对话已停止。");
+          }
+          return;
+        }
+
+        if (shouldContinue && continuousChatVoiceRef.current) {
+          scheduleNextContinuousRecording();
+        }
+      } finally {
+        isCompletingChatVoiceRef.current = false;
+      }
+    },
+    [
+      addTranscript,
+      chatVoiceSendMode,
+      disableContinuousChatVoice,
+      scheduleNextContinuousRecording,
+      sendChatTurn,
+      stopChatVoiceRecording,
+    ],
+  );
+
+  const stopContinuousChatVoice = useCallback((): void => {
+    const wasEnabled = continuousChatVoiceRef.current;
+    disableContinuousChatVoice();
+
+    if (isChatVoiceRecording) {
+      cancelChatVoiceRecording();
+    }
+
+    if (speechState.isSpeaking) {
+      cancelChatSpeech();
+    }
+
+    if (wasEnabled) {
+      addTranscript("system", "连续语音对话已停止。");
+    }
+  }, [
+    addTranscript,
+    cancelChatSpeech,
+    cancelChatVoiceRecording,
+    disableContinuousChatVoice,
+    isChatVoiceRecording,
+    speechState.isSpeaking,
+  ]);
+
+  const startContinuousChatVoice = useCallback((): void => {
+    if (
+      !hasMedia ||
+      !transcriptionState.isRecordingSupported ||
+      isChatVoiceBusy ||
+      chatState.isSending
+    ) {
+      return;
+    }
+
+    clearContinuousChatRestart();
+    continuousChatVoiceRef.current = true;
+    setIsContinuousChatVoiceEnabled(true);
+    setChatVoiceSendMode("auto-send");
+
+    if (speechState.isSynthesisSupported) {
+      setIsChatAnswerSpeechEnabled(true);
+    }
+
+    const started = startChatVoiceRecording();
+
+    if (!started) {
+      disableContinuousChatVoice();
+      return;
+    }
+
+    addTranscript(
+      "system",
+      speechState.isSynthesisSupported
+        ? "连续语音对话已开启，回答会自动朗读。"
+        : "连续语音对话已开启；当前浏览器不支持自动朗读。",
+    );
+  }, [
+    addTranscript,
+    chatState.isSending,
+    clearContinuousChatRestart,
+    disableContinuousChatVoice,
+    hasMedia,
+    isChatVoiceBusy,
+    speechState.isSynthesisSupported,
+    startChatVoiceRecording,
+    transcriptionState.isRecordingSupported,
+  ]);
+
+  const handleContinuousChatVoiceClick = (): void => {
+    if (isContinuousChatVoiceEnabled) {
+      stopContinuousChatVoice();
+      return;
+    }
+
+    startContinuousChatVoice();
+  };
 
   useEffect(() => {
     const videoElement = videoRef.current;
@@ -671,6 +953,118 @@ export function AssistantWorkspace(): React.JSX.Element {
       audioElement.srcObject = null;
     };
   }, [remoteStream]);
+
+  useEffect(() => {
+    return () => {
+      continuousChatVoiceRef.current = false;
+      clearContinuousChatRestart();
+    };
+  }, [clearContinuousChatRestart]);
+
+  useEffect(() => {
+    if (!isContinuousChatVoiceEnabled || !isChatMode || !isChatVoiceRecording) {
+      return;
+    }
+
+    const audioTrack = stream?.getAudioTracks()[0];
+
+    if (audioTrack === undefined) {
+      return;
+    }
+
+    let hasDetectedSpeech = false;
+    let silenceStartedAt: number | null = null;
+    let isStopping = false;
+    const recordingStartedAt = Date.now();
+    const AudioContextConstructor = getAudioContextConstructor();
+    let audioContext: AudioContext | null = null;
+    let sourceNode: MediaStreamAudioSourceNode | null = null;
+    let intervalId: number | null = null;
+
+    const stopAfterTurn = (): void => {
+      if (isStopping) {
+        return;
+      }
+
+      isStopping = true;
+      void completeChatVoiceRecording("continuous");
+    };
+
+    const maxRecordingTimeoutId = window.setTimeout(
+      stopAfterTurn,
+      CONTINUOUS_CHAT_MAX_RECORDING_MS,
+    );
+
+    if (AudioContextConstructor !== null) {
+      try {
+        audioContext = new AudioContextConstructor();
+        const audioOnlyStream = new MediaStream([audioTrack]);
+        const analyserNode = audioContext.createAnalyser();
+        analyserNode.fftSize = 1024;
+        sourceNode = audioContext.createMediaStreamSource(audioOnlyStream);
+        sourceNode.connect(analyserNode);
+
+        const samples = new Uint8Array(analyserNode.fftSize);
+        intervalId = window.setInterval(() => {
+          analyserNode.getByteTimeDomainData(samples);
+          const level = calculateAudioRootMeanSquare(samples);
+          const now = Date.now();
+          const elapsedMs = now - recordingStartedAt;
+
+          if (level >= CONTINUOUS_CHAT_SPEECH_THRESHOLD) {
+            hasDetectedSpeech = true;
+            silenceStartedAt = null;
+            return;
+          }
+
+          if (!hasDetectedSpeech || elapsedMs < CONTINUOUS_CHAT_MIN_RECORDING_MS) {
+            return;
+          }
+
+          if (silenceStartedAt === null) {
+            silenceStartedAt = now;
+            return;
+          }
+
+          if (now - silenceStartedAt >= CONTINUOUS_CHAT_SILENCE_MS) {
+            stopAfterTurn();
+          }
+        }, CONTINUOUS_CHAT_AUDIO_LEVEL_POLL_MS);
+      } catch {
+        void audioContext?.close().catch(() => undefined);
+        audioContext = null;
+        sourceNode = null;
+      }
+    }
+
+    return () => {
+      window.clearTimeout(maxRecordingTimeoutId);
+
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
+
+      sourceNode?.disconnect();
+      void audioContext?.close().catch(() => undefined);
+    };
+  }, [
+    completeChatVoiceRecording,
+    isChatMode,
+    isChatVoiceRecording,
+    isContinuousChatVoiceEnabled,
+    stream,
+  ]);
+
+  useEffect(() => {
+    if (isContinuousChatVoiceEnabled && (!hasMedia || !isChatMode)) {
+      stopContinuousChatVoice();
+    }
+  }, [
+    hasMedia,
+    isChatMode,
+    isContinuousChatVoiceEnabled,
+    stopContinuousChatVoice,
+  ]);
 
   useEffect(() => {
     if (mediaState.status === "granted") {
@@ -741,6 +1135,7 @@ export function AssistantWorkspace(): React.JSX.Element {
   };
 
   const handleReleaseMedia = (): void => {
+    stopContinuousChatVoice();
     cancelChatVoiceRecording();
     stopSession();
     stopAccess();
@@ -776,6 +1171,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     }
 
     if (nextProviderMode === "realtime") {
+      stopContinuousChatVoice();
       cancelChatVoiceRecording();
       cancelChatSpeech();
     }
@@ -931,38 +1327,7 @@ export function AssistantWorkspace(): React.JSX.Element {
 
   const handleChatSpeechInputClick = (): void => {
     if (isChatVoiceRecording) {
-      void (async (): Promise<void> => {
-        addTranscript("system", "已停止录音，正在转写语音。");
-        const transcription = await stopChatVoiceRecording();
-
-        if (transcription === null) {
-          return;
-        }
-
-        const recognizedText = transcription.text.trim();
-
-        if (recognizedText.length === 0) {
-          addTranscript("system", "语音转写结果为空，请再试一次。");
-          return;
-        }
-
-        if (chatVoiceSendMode === "review") {
-          setTextDraft((currentDraft) => {
-            const trimmedCurrentDraft = currentDraft.trim();
-
-            if (trimmedCurrentDraft.length === 0) {
-              return recognizedText;
-            }
-
-            return `${trimmedCurrentDraft} ${recognizedText}`;
-          });
-          addTranscript("system", "语音已转写并填入输入框。");
-          return;
-        }
-
-        addTranscript("user", recognizedText);
-        await sendChatTurn({ message: recognizedText });
-      })();
+      void completeChatVoiceRecording("manual");
       return;
     }
 
@@ -1103,7 +1468,10 @@ export function AssistantWorkspace(): React.JSX.Element {
     !hasRealtimeConnection;
   const canUseSessionButton =
     isChatMode
-      ? !isProviderConfigLoading && !chatState.isSending && !isChatVoiceBusy
+      ? !isProviderConfigLoading &&
+        !chatState.isSending &&
+        !isChatVoiceBusy &&
+        !isContinuousChatVoiceEnabled
       : canStartSession;
   const canChangeTurnMode =
     isRealtimeMode &&
@@ -1115,25 +1483,37 @@ export function AssistantWorkspace(): React.JSX.Element {
     !isProviderConfigLoading &&
     !chatState.isSending &&
     !isChatVoiceBusy &&
+    !isContinuousChatVoiceEnabled &&
     realtimeState.status !== "creating-session" &&
     realtimeState.status !== "connecting";
   const canChangeResponseBudget = isChatMode
-    ? !chatState.isSending && !isChatVoiceBusy
+    ? !chatState.isSending && !isChatVoiceBusy && !isContinuousChatVoiceEnabled
     : canChangeTurnMode;
   const canRealtimeTurn =
     isRealtimeMode && assistantPhase === "listening" && hasRealtimeConnection;
   const canVisualQuestion = isChatMode
-    ? hasMedia && !chatState.isSending && !isChatVoiceBusy
+    ? hasMedia &&
+      !chatState.isSending &&
+      !isChatVoiceBusy &&
+      !isContinuousChatVoiceEnabled
     : canRealtimeTurn;
   const canSendTextMessage = isChatMode
-    ? !chatState.isSending && !isChatVoiceBusy
+    ? !chatState.isSending && !isChatVoiceBusy && !isContinuousChatVoiceEnabled
     : hasRealtimeConnection;
   const canToggleChatSpeechInput =
     isChatMode &&
     transcriptionState.isRecordingSupported &&
     hasMedia &&
+    !isContinuousChatVoiceEnabled &&
     !isChatVoiceTranscribing &&
     (!chatState.isSending || isChatVoiceRecording);
+  const canStartContinuousChatVoice =
+    isChatMode &&
+    transcriptionState.isRecordingSupported &&
+    hasMedia &&
+    !isContinuousChatVoiceEnabled &&
+    !isChatVoiceBusy &&
+    !chatState.isSending;
   const canPushToTalk =
     isRealtimeMode &&
     assistantPhase === "listening" &&
@@ -1152,7 +1532,9 @@ export function AssistantWorkspace(): React.JSX.Element {
     transcriptionState.errorMessage ??
     chatState.errorMessage;
   const providerDetail = isChatMode
-    ? isChatVoiceTranscribing
+    ? isContinuousChatVoiceEnabled
+      ? "连续语音对话已开启"
+      : isChatVoiceTranscribing
       ? "正在通过 Worker 转写语音"
       : chatState.isSending
         ? "正在通过 HTTP 请求 Chat Completions"
@@ -1335,6 +1717,24 @@ export function AssistantWorkspace(): React.JSX.Element {
             {isChatMode ? (
               <div className="chat-speech-controls" aria-label="Chat 语音输入">
                 <button
+                  className="inline-action-button continuous-voice-button"
+                  type="button"
+                  onClick={handleContinuousChatVoiceClick}
+                  disabled={
+                    !isContinuousChatVoiceEnabled && !canStartContinuousChatVoice
+                  }
+                  aria-pressed={isContinuousChatVoiceEnabled}
+                >
+                  {isContinuousChatVoiceEnabled ? (
+                    <CircleStop size={16} aria-hidden="true" />
+                  ) : (
+                    <Radio size={16} aria-hidden="true" />
+                  )}
+                  <span>
+                    {isContinuousChatVoiceEnabled ? "停止连续" : "连续对话"}
+                  </span>
+                </button>
+                <button
                   className="inline-action-button"
                   type="button"
                   onClick={handleChatSpeechInputClick}
@@ -1346,7 +1746,7 @@ export function AssistantWorkspace(): React.JSX.Element {
                   ) : (
                     <Mic size={16} aria-hidden="true" />
                   )}
-                  <span>{isChatVoiceRecording ? "停止转写" : "语音提问"}</span>
+                  <span>{isChatVoiceRecording ? "停止转写" : "单次语音"}</span>
                 </button>
                 <fieldset
                   className="mode-segment"
@@ -1629,47 +2029,6 @@ export function AssistantWorkspace(): React.JSX.Element {
           </div>
         </div>
 
-        <div className="visual-context-panel" aria-label="视觉上下文">
-          <div className="panel-heading">
-            <ImageIcon size={18} aria-hidden="true" />
-            <span>最近画面</span>
-          </div>
-
-          <div className="frame-sample">
-            {lastFrameDataUrl ? (
-              <img src={lastFrameDataUrl} alt="最近采样画面" />
-            ) : (
-              <div className="frame-placeholder">
-                <ImageIcon size={22} aria-hidden="true" />
-                <span>暂无采样画面</span>
-              </div>
-            )}
-          </div>
-
-          <dl className="frame-stats">
-            <div>
-              <dt>采样</dt>
-              <dd>{sampledFrameCount}</dd>
-            </div>
-            <div>
-              <dt>已发送</dt>
-              <dd>{sentFrameCount}</dd>
-            </div>
-            <div>
-              <dt>已跳过</dt>
-              <dd>{skippedAutoFrameCount}</dd>
-            </div>
-            <div>
-              <dt>已裁剪</dt>
-              <dd>{prunedFrameCount}</dd>
-            </div>
-            <div>
-              <dt>间隔</dt>
-              <dd>{isAutoSampling ? `${samplingIntervalSeconds} 秒` : "手动"}</dd>
-            </div>
-          </dl>
-        </div>
-
         <div className="dialogue-board" aria-label="对话记录">
           <div className="panel-heading">
             <Volume2 size={18} aria-hidden="true" />
@@ -1718,6 +2077,47 @@ export function AssistantWorkspace(): React.JSX.Element {
               <span>{chatState.isSending ? "发送中" : "发送"}</span>
             </button>
           </form>
+        </div>
+
+        <div className="visual-context-panel" aria-label="视觉上下文">
+          <div className="panel-heading">
+            <ImageIcon size={18} aria-hidden="true" />
+            <span>最近画面</span>
+          </div>
+
+          <div className="frame-sample">
+            {lastFrameDataUrl ? (
+              <img src={lastFrameDataUrl} alt="最近采样画面" />
+            ) : (
+              <div className="frame-placeholder">
+                <ImageIcon size={22} aria-hidden="true" />
+                <span>暂无采样画面</span>
+              </div>
+            )}
+          </div>
+
+          <dl className="frame-stats">
+            <div>
+              <dt>采样</dt>
+              <dd>{sampledFrameCount}</dd>
+            </div>
+            <div>
+              <dt>已发送</dt>
+              <dd>{sentFrameCount}</dd>
+            </div>
+            <div>
+              <dt>已跳过</dt>
+              <dd>{skippedAutoFrameCount}</dd>
+            </div>
+            <div>
+              <dt>已裁剪</dt>
+              <dd>{prunedFrameCount}</dd>
+            </div>
+            <div>
+              <dt>间隔</dt>
+              <dd>{isAutoSampling ? `${samplingIntervalSeconds} 秒` : "手动"}</dd>
+            </div>
+          </dl>
         </div>
 
         <aside className="security-strip" aria-label="安全说明">
