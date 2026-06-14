@@ -343,7 +343,8 @@ Environment:
 
 | Key | Required | Notes |
 | --- | :---: | --- |
-| `OPENAI_API_KEY` | Yes for real calls | Worker secret or `.dev.vars`; never a frontend variable |
+| `OPENAI_TRANSCRIPTION_API_KEY` | No | Optional Worker secret used only for transcription; falls back to `OPENAI_API_KEY` when unset |
+| `OPENAI_API_KEY` | Yes for real calls unless `OPENAI_TRANSCRIPTION_API_KEY` is set | Worker secret or `.dev.vars`; never a frontend variable |
 | `OPENAI_BASE_URL` | No | Shared provider root, default `https://api.openai.com/v1` |
 | `OPENAI_TRANSCRIPTION_BASE_URL` | No | Transcription-specific provider root override |
 | `OPENAI_TRANSCRIPTIONS_PATH` | No | Defaults to `/audio/transcriptions` |
@@ -362,7 +363,7 @@ Upstream payload:
 
 | Condition | Status | Response |
 | --- | ---: | --- |
-| Missing `OPENAI_API_KEY` | 503 | `{ success: false, code: "missing_openai_api_key" }` |
+| Missing both `OPENAI_TRANSCRIPTION_API_KEY` and `OPENAI_API_KEY` | 503 | `{ success: false, code: "missing_openai_api_key" }` |
 | Invalid transcription provider URL config | 503 | `{ success: false, code: "invalid_transcription_provider_config" }` |
 | Non-multipart request | 400 | `{ success: false, code: "invalid_audio_upload" }` |
 | Missing, empty, too-large, or unsupported audio upload | 400/413 | `{ success: false, code: "invalid_audio_upload" }` |
@@ -375,12 +376,17 @@ Upstream payload:
 
 - Good: browser records a short utterance, posts it to the same-origin Worker,
   and receives normalized transcript text without exposing provider secrets.
+- Base: `OPENAI_TRANSCRIPTION_API_KEY` is unset; the Worker uses
+  `OPENAI_API_KEY` for backward compatibility.
 - Base: `OPENAI_TRANSCRIPTION_MODEL` is unset; the Worker uses `whisper-1`.
 - Base: the request supplies `language=zh`; that value is forwarded upstream
   instead of the optional env language.
 - Base: a valid `OPENAI_TRANSCRIPTIONS_URL` is enough to route the upstream
   request even when `OPENAI_BASE_URL` is unset or invalid, because base/path is
   not used in full-URL override mode.
+- Base: `OPENAI_TRANSCRIPTION_BASE_URL=https://asr.example/v1` plus the default
+  `OPENAI_TRANSCRIPTIONS_PATH=/audio/transcriptions` produces
+  `https://asr.example/v1/audio/transcriptions`.
 - Bad: browser code calls the transcription provider directly with a permanent
   API key.
 - Bad: Worker forwards unbounded file uploads or accepts arbitrary non-audio
@@ -388,7 +394,9 @@ Upstream payload:
 
 #### 6. Tests Required
 
-- Missing key maps to 503.
+- Missing both transcription-specific and shared keys maps to 503.
+- Mocked provider success asserts `OPENAI_TRANSCRIPTION_API_KEY` takes
+  precedence over `OPENAI_API_KEY`.
 - Invalid provider URL configuration maps to 503.
 - Invalid non-empty `OPENAI_TRANSCRIPTIONS_URL` maps to 503 instead of silently
   falling back to base/path.

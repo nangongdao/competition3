@@ -141,7 +141,7 @@ export function getLocalizedSpeechApiErrorMessage(
   errorResponse: SpeechApiErrorResponse,
 ): string {
   if (errorResponse.code === "missing_openai_api_key") {
-    return "Worker 尚未配置 OPENAI_API_KEY，无法进行语音转文字。";
+    return "Worker 尚未配置 OPENAI_TRANSCRIPTION_API_KEY 或 OPENAI_API_KEY，无法进行语音转文字。";
   }
 
   if (errorResponse.code === "invalid_transcription_provider_config") {

@@ -39,4 +39,17 @@ describe("worker speech transcription helpers", () => {
       }),
     ).toBe("语音转文字调用失败：model not found");
   });
+
+  it("localizes missing transcription credentials", () => {
+    expect(
+      getLocalizedSpeechApiErrorMessage({
+        success: false,
+        code: "missing_openai_api_key",
+        error:
+          "OPENAI_TRANSCRIPTION_API_KEY or OPENAI_API_KEY is not configured.",
+      }),
+    ).toBe(
+      "Worker 尚未配置 OPENAI_TRANSCRIPTION_API_KEY 或 OPENAI_API_KEY，无法进行语音转文字。",
+    );
+  });
 });

@@ -55,7 +55,7 @@ describe("speech transcription route", () => {
     vi.unstubAllGlobals();
   });
 
-  it("returns 503 when OPENAI_API_KEY is missing", async () => {
+  it("returns 503 when transcription API keys are missing", async () => {
     const response = await app.request(
       "/api/speech/transcription",
       {
@@ -69,6 +69,48 @@ describe("speech transcription route", () => {
     expect(response.status).toBe(503);
     expect(body.success).toBe(false);
     expect(body.code).toBe("missing_openai_api_key");
+  });
+
+  it("uses OPENAI_TRANSCRIPTION_API_KEY before OPENAI_API_KEY", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        void input;
+        void init;
+
+        return new Response(JSON.stringify({ text: "ok" }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/speech/transcription",
+      {
+        method: "POST",
+        body: createAudioFormData(),
+      },
+      createEnv({
+        OPENAI_API_KEY: "chat-key",
+        OPENAI_TRANSCRIPTION_API_KEY: "transcription-key",
+      }),
+    );
+    const body = await readJson<SpeechTranscriptionSuccessResponse>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.text).toBe("ok");
+
+    const firstCall = fetchMock.mock.calls[0];
+    if (firstCall === undefined) {
+      throw new Error("Expected upstream fetch to be called.");
+    }
+
+    expect(firstCall[1]?.headers).toEqual({
+      Authorization: "Bearer transcription-key",
+    });
   });
 
   it("returns 503 for invalid transcription provider configuration", async () => {

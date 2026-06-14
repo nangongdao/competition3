@@ -41,9 +41,11 @@ boundary in place:
 * Dependency and environment documentation
 
 The media workspace remains usable without model credentials. Real model calls
-require the Worker endpoint and `OPENAI_API_KEY`. Chat Completions mode also
-requires `OPENAI_CHAT_MODEL`; Chat voice input additionally needs a provider
-that supports `/audio/transcriptions` or an equivalent configured endpoint.
+require the Worker endpoint and server-side provider credentials. Chat
+Completions and Realtime use `OPENAI_API_KEY`; Chat voice input can use
+`OPENAI_TRANSCRIPTION_API_KEY` or fall back to `OPENAI_API_KEY`, and additionally
+needs a provider that supports `/audio/transcriptions` or an equivalent
+configured endpoint. Chat Completions mode also requires `OPENAI_CHAT_MODEL`.
 Realtime mode requires a Realtime-capable model.
 
 ## Requirements
@@ -146,6 +148,18 @@ corepack pnpm install
   -BaseUrl "https://api.your-provider.example/v1" `
   -ChatModel "your-vision-chat-model" `
   -TranscriptionModel "whisper-1"
+```
+
+If Chat Completions and ASR use different providers or keys:
+
+```powershell
+.\scripts\start-chat-worker.ps1 `
+  -ApiKey "your-chat-provider-key" `
+  -ChatBaseUrl "https://chat-provider.example/v1" `
+  -ChatModel "your-vision-chat-model" `
+  -TranscriptionApiKey "your-asr-provider-key" `
+  -TranscriptionBaseUrl "https://asr-provider.example/v1" `
+  -TranscriptionModel "your-asr-model"
 ```
 
 Open the Worker URL after startup:
@@ -259,6 +273,7 @@ OPENAI_CHAT_COMPLETIONS_URL=
 OPENAI_CHAT_MODEL=
 OPENAI_CHAT_TOKEN_LIMIT_PARAMETER=max_tokens
 OPENAI_CHAT_VISION_INPUT=enabled
+OPENAI_TRANSCRIPTION_API_KEY=
 OPENAI_TRANSCRIPTION_BASE_URL=
 OPENAI_TRANSCRIPTIONS_PATH=/audio/transcriptions
 OPENAI_TRANSCRIPTIONS_URL=
@@ -303,12 +318,21 @@ Parameter meanings:
   `image_url` content. Use `enabled` for vision-capable chat models or
   `disabled` for text-only models that reject multimodal message content.
   Default: `enabled`.
+* `OPENAI_TRANSCRIPTION_API_KEY`: Optional server-side API key used only for
+  `/api/speech/transcription`. If unset, transcription falls back to
+  `OPENAI_API_KEY`. Configure this as a Worker secret when ASR uses a different
+  provider key from Chat or Realtime.
 * `OPENAI_TRANSCRIPTION_BASE_URL`: Optional transcription-specific API root. If
   set, it overrides `OPENAI_BASE_URL` only for `/api/speech/transcription`.
 * `OPENAI_TRANSCRIPTIONS_PATH`: Path appended to the selected transcription
-  base URL. Default: `/audio/transcriptions`.
+  base URL. Default: `/audio/transcriptions`. For example,
+  `OPENAI_TRANSCRIPTION_BASE_URL=https://asr.example/v1` and
+  `OPENAI_TRANSCRIPTIONS_PATH=/audio/transcriptions` produce
+  `https://asr.example/v1/audio/transcriptions`.
 * `OPENAI_TRANSCRIPTIONS_URL`: Optional full audio transcription endpoint URL.
-  Use only when the provider cannot be represented by base URL plus path.
+  Use only when the provider cannot be represented by base URL plus path. When
+  this is set, the Worker uses it directly and does not append
+  `OPENAI_TRANSCRIPTIONS_PATH`.
 * `OPENAI_TRANSCRIPTION_MODEL`: Provider model ID used for audio transcription.
   Defaults to `whisper-1` when unset.
 * `OPENAI_TRANSCRIPTION_LANGUAGE`: Optional transcription language hint. Use
@@ -331,10 +355,11 @@ Parameter meanings:
 
 Frontend variables must use the `VITE_` prefix and must not contain secrets.
 
-If `OPENAI_API_KEY` is not configured, the frontend still runs locally and the
-Worker endpoints return configuration errors instead of exposing a browser-side
-key. Chat mode will also report a configuration error until
-`OPENAI_CHAT_MODEL` is set.
+If the required Worker secrets are not configured, the frontend still runs
+locally and the Worker endpoints return configuration errors instead of
+exposing browser-side keys. Chat mode will report a configuration error until
+`OPENAI_API_KEY` and `OPENAI_CHAT_MODEL` are set. Chat voice transcription needs
+either `OPENAI_TRANSCRIPTION_API_KEY` or the fallback `OPENAI_API_KEY`.
 
 ## Third-Party Provider Requirements
 
@@ -368,7 +393,8 @@ Realtime mode when you need true low-latency model audio.
 
 The transcription provider/model must support:
 
-* Bearer API key authentication with `OPENAI_API_KEY`.
+* Bearer API key authentication with `OPENAI_TRANSCRIPTION_API_KEY` or the
+  fallback `OPENAI_API_KEY`.
 * Multipart form-data requests with `model`, `file`, `response_format=json`,
   and optional `language`.
 * A response body with a non-empty `text` field.

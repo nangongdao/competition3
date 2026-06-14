@@ -14,8 +14,10 @@ server side.
 * Frontend: Vite, React, TypeScript, Tailwind CSS v4.
 * Backend: Cloudflare Worker with Hono routes.
 * Media: browser `getUserMedia` for camera and microphone permissions.
-* AI provider boundary: Worker endpoints keep `OPENAI_API_KEY` server-side and
-  support two modes:
+* AI provider boundary: Worker endpoints keep permanent provider API keys
+  server-side. Chat and Realtime use `OPENAI_API_KEY`; Chat speech
+  transcription can use `OPENAI_TRANSCRIPTION_API_KEY` or fall back to
+  `OPENAI_API_KEY`. The app supports two modes:
   * Chat Completions compatibility mode for ordinary OpenAI-compatible
     `/chat/completions` providers.
   * Realtime mode for providers that support short-lived sessions plus WebRTC
@@ -87,8 +89,9 @@ image in 5, text in 4, text out 16, cached in 0.4):
 * **Session duration policy (implemented)**: the backend returns a 10-minute
   intended cap in the session cost policy and the browser closes the Realtime
   connection when that cap is reached.
-* **Key safety (implemented)**: permanent OpenAI API keys stay in Worker
-  environment variables.
+* **Key safety (implemented)**: permanent provider API keys stay in Worker
+  environment variables, including the optional transcription-specific
+  `OPENAI_TRANSCRIPTION_API_KEY`.
 * **Provider configuration (implemented)**: the Worker accepts
   OpenAI-compatible Realtime base URL/path overrides and returns the browser
   SDP endpoint as `webrtcUrl`, so permanent keys and provider routing stay

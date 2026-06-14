@@ -9,6 +9,8 @@ param(
   [string]$ChatTokenLimitParameter = "max_tokens",
   [ValidateSet("enabled", "disabled")]
   [string]$ChatVisionInput = "enabled",
+  [string]$TranscriptionApiKey = "",
+  [string]$TranscriptionBaseUrl = "",
   [string]$TranscriptionsPath = "/audio/transcriptions",
   [string]$TranscriptionsUrl = "",
   [string]$TranscriptionModel = "whisper-1",
@@ -75,6 +77,8 @@ Add-EnvLine $lines "OPENAI_CHAT_COMPLETIONS_URL" $ChatCompletionsUrl
 Add-EnvLine $lines "OPENAI_CHAT_MODEL" $ChatModel
 Add-EnvLine $lines "OPENAI_CHAT_TOKEN_LIMIT_PARAMETER" $ChatTokenLimitParameter
 Add-EnvLine $lines "OPENAI_CHAT_VISION_INPUT" $ChatVisionInput
+Add-EnvLine $lines "OPENAI_TRANSCRIPTION_API_KEY" $TranscriptionApiKey
+Add-EnvLine $lines "OPENAI_TRANSCRIPTION_BASE_URL" $TranscriptionBaseUrl
 Add-EnvLine $lines "OPENAI_TRANSCRIPTIONS_PATH" $TranscriptionsPath
 Add-EnvLine $lines "OPENAI_TRANSCRIPTIONS_URL" $TranscriptionsUrl
 Add-EnvLine $lines "OPENAI_TRANSCRIPTION_MODEL" $TranscriptionModel

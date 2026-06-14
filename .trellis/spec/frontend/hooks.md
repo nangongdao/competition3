@@ -638,8 +638,10 @@ type BrowserSpeechAdapterState = {
 ### 3. Contracts
 
 - The browser must call same-origin Worker endpoints only.
-- Permanent `OPENAI_API_KEY`, provider base URLs, and model routing values must
+- Permanent provider keys, provider base URLs, and model routing values must
   never be exposed through frontend settings, `VITE_*`, localStorage, or URLs.
+  This includes `OPENAI_API_KEY` and transcription-specific keys such as
+  `OPENAI_TRANSCRIPTION_API_KEY`.
 - `useProviderConfig` may expose only safe non-secret defaults such as
   `providerMode`.
 - Chat mode does not require a Realtime session, data channel, or WebRTC peer
@@ -806,6 +808,7 @@ type UseWorkerSpeechTranscriptionResult = {
 | Recording start throws | Status `error`; show microphone permission/start failure |
 | Recording stops with no chunks | Status `error`; ask user to retry |
 | Worker returns a typed API error | Localize message and keep typed Chat usable |
+| Worker returns 503 `missing_openai_api_key` | Tell the user the Worker needs `OPENAI_TRANSCRIPTION_API_KEY` or fallback `OPENAI_API_KEY`; do not suggest a browser-side key setting |
 | Worker returns non-JSON or invalid success shape | Show a localized transcription contract error that hints the user may be on the Vite preview URL instead of the Worker URL. Do not surface raw `Unexpected token '<'` JSON parser text. |
 | Transcription succeeds | Return `{ success: true, text, model }` to the component |
 
@@ -817,6 +820,8 @@ type UseWorkerSpeechTranscriptionResult = {
   spending Chat tokens until the user sends.
 - Base: typed Chat remains available when recording is unsupported or
   transcription fails.
+- Base: transcription can use a dedicated Worker secret
+  `OPENAI_TRANSCRIPTION_API_KEY`, falling back to `OPENAI_API_KEY`.
 - Bad: the component sends raw audio to `/api/chat/completion`.
 - Bad: the browser calls the upstream transcription provider directly or embeds
   provider routing in frontend code.

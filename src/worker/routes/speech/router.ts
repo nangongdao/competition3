@@ -49,12 +49,12 @@ type UpstreamResponseBody = {
 export const speechRoutes = new Hono<AppEnv>();
 
 speechRoutes.post("/transcription", async (c) => {
-  const apiKey = c.env.OPENAI_API_KEY;
+  const apiKey = resolveTranscriptionApiKey(c.env);
 
   if (!apiKey) {
     return c.json(
       createErrorResponse(
-        "OPENAI_API_KEY is not configured for this Worker.",
+        "OPENAI_TRANSCRIPTION_API_KEY or OPENAI_API_KEY is not configured for this Worker.",
         "missing_openai_api_key",
       ),
       503,
@@ -145,6 +145,23 @@ function createErrorResponse(
     error,
     code,
   };
+}
+
+function resolveTranscriptionApiKey(
+  env: AppEnv["Bindings"],
+): string | undefined {
+  return (
+    normalizeOptionalSecret(env.OPENAI_TRANSCRIPTION_API_KEY) ??
+    normalizeOptionalSecret(env.OPENAI_API_KEY)
+  );
+}
+
+function normalizeOptionalSecret(value: string | undefined): string | undefined {
+  const trimmedValue = value?.trim();
+
+  return trimmedValue !== undefined && trimmedValue.length > 0
+    ? trimmedValue
+    : undefined;
 }
 
 function resolveTranscriptionProviderConfig(

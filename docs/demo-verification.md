@@ -66,6 +66,18 @@ requires a Chat Completions endpoint.
   -TranscriptionModel "whisper-1"
 ```
 
+If Chat Completions and speech transcription use separate providers:
+
+```powershell
+.\scripts\start-chat-worker.ps1 `
+  -ApiKey "your-chat-provider-key" `
+  -ChatBaseUrl "https://chat-provider.example/v1" `
+  -ChatModel "your-vision-chat-model" `
+  -TranscriptionApiKey "your-asr-provider-key" `
+  -TranscriptionBaseUrl "https://asr-provider.example/v1" `
+  -TranscriptionModel "your-asr-model"
+```
+
 In a second PowerShell window:
 
 ```powershell
