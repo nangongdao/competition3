@@ -104,6 +104,41 @@ printing secrets:
 See [`docs/demo-verification.md`](docs/demo-verification.md) for the full
 no-key, Chat Completions, Realtime, hardware, and cost-evidence checklist.
 
+## One-Click Local Preview
+
+Start the full local Worker preview in the background and open the browser:
+
+```powershell
+.\scripts\start-local-preview.ps1
+```
+
+The default preview URL is:
+
+```text
+http://localhost:8787
+```
+
+Stop the preview started by the helper:
+
+```powershell
+.\scripts\stop-local-preview.ps1
+```
+
+For a frontend-only Vite preview without Worker API routes:
+
+```powershell
+.\scripts\start-local-preview.ps1 -Mode vite
+```
+
+If a tracked preview is already running, restart it:
+
+```powershell
+.\scripts\start-local-preview.ps1 -Force
+```
+
+The helper writes local runtime state and logs under `.local-preview/`, which
+is ignored by git. It does not print provider secrets.
+
 ## Worker Development
 
 Build the frontend and start the Worker for end-to-end API and Realtime testing:

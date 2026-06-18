@@ -273,6 +273,92 @@ Get-Content .\.dev.vars
 
 ---
 
+## Local Preview Control Script Contract
+
+Use `scripts/start-local-preview.ps1` and `scripts/stop-local-preview.ps1` when
+the user needs a simple Windows-local way to start and stop this project without
+manually tracking process IDs or terminal windows.
+
+### 1. Scope / Trigger
+
+- Trigger: local preview ergonomics, demo setup, or user support for starting
+  and stopping the project on Windows.
+- The scripts manage local development processes only. They must not deploy to
+  Cloudflare, upload secrets, or make provider model calls by themselves.
+
+### 2. Signatures
+
+```powershell
+.\scripts\start-local-preview.ps1 `
+  [-Mode worker|vite] `
+  [-NoOpen] `
+  [-Force] `
+  [-OpenTimeoutSeconds 45]
+
+.\scripts\stop-local-preview.ps1 [-Quiet]
+```
+
+### 3. Contracts
+
+- Default start mode is `worker`, which runs `corepack pnpm dev:worker` and
+  targets `http://localhost:8787`.
+- `-Mode vite` runs `corepack pnpm dev` and targets `http://localhost:5173`;
+  this mode does not provide Worker API endpoints.
+- Runtime state and logs live under `.local-preview/`, which must stay ignored
+  by git.
+- The start script records PID, mode, URL, command, log path, and start time in
+  `.local-preview/preview-state.json`.
+- The stop script stops the recorded process and its child processes, then
+  removes the state file.
+- Scripts must not read, echo, or print provider secret values from `.dev.vars`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Missing `node`, `corepack`, or `powershell.exe` | Start script fails |
+| Missing `package.json` | Start script fails with repository-location guidance |
+| Tracked preview already running | Start script reports URL/PID and exits |
+| Tracked preview already running with `-Force` | Stop tracked preview, then start a new one |
+| Stale state file with no running process | Remove stale state and continue |
+| No state file on stop | Report that no tracked preview is running |
+| Preview URL does not respond before timeout | Warn, keep process running, and open URL unless `-NoOpen` |
+
+### 5. Good/Base/Bad Cases
+
+- Good: `.\scripts\start-local-preview.ps1` starts the Worker-backed preview,
+  opens `http://localhost:8787`, and `.\scripts\stop-local-preview.ps1` stops it.
+- Base: `.\scripts\start-local-preview.ps1 -Mode vite -NoOpen` starts a
+  frontend-only preview for layout inspection.
+- Bad: killing arbitrary Node/Wrangler processes that were not started by the
+  helper, or committing `.local-preview/` runtime files.
+
+### 6. Tests Required
+
+- Run `.\scripts\start-local-preview.ps1 -NoOpen`, inspect the state file, then
+  run `.\scripts\stop-local-preview.ps1`.
+- Run the same smoke path with `-Mode vite` when changing mode logic.
+- Run `.\scripts\verify-demo.ps1 -SkipQuality -SkipBuild` after script changes.
+- Run `git diff --check` before committing.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```powershell
+# Broadly kills unrelated user processes.
+Get-Process node | Stop-Process -Force
+```
+
+#### Correct
+
+```powershell
+# Stops only the process tree recorded by the helper.
+.\scripts\stop-local-preview.ps1
+```
+
+---
+
 ## Trellis Task Handling
 
 - Record the task branch and base branch in task metadata when possible:
