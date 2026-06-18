@@ -133,6 +133,16 @@ curl -X POST http://localhost:8787/api/chat/completion \
   -d "{\"message\":\"hello\",\"responseBudget\":\"brief\"}"
 ```
 
+## Cloudflare Deployment
+
+For the online demo path, deploy the Worker and static assets with Wrangler.
+The permanent provider key must be stored as a Cloudflare Worker secret, not in
+the repository or a frontend variable.
+
+See [`docs/deployment.md`](docs/deployment.md) for the full Cloudflare
+deployment workflow, including provider-mode configuration, `wrangler secret`
+commands, `wrangler deploy`, and deployed URL verification.
+
 ## Windows Quick Start With Third-Party Chat Completions
 
 This is the recommended mode for most third-party API sites because they
