@@ -4,6 +4,8 @@ import {
   Camera,
   CircleStop,
   Download,
+  FileJson,
+  FileText,
   Gauge,
   Image as ImageIcon,
   Hand,
@@ -16,6 +18,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   Video,
   Volume2,
 } from "lucide-react";
@@ -34,6 +37,12 @@ import {
   type RealtimeResponseMode,
   useRealtimeSession,
 } from "@/modules/assistant/hooks/use-realtime-session";
+import {
+  createConversationExportFilename,
+  isChatTurnRetryAllowed,
+  serializeConversationJson,
+  serializeConversationMarkdown,
+} from "@/modules/assistant/lib/conversation";
 import {
   formatTokens,
   formatUsd,
@@ -192,6 +201,12 @@ const chatVoiceSendModeOptions: readonly {
 
 type ChatVoiceCompletionSource = "manual" | "continuous";
 
+type RetryableChatTurn = {
+  message: string;
+  imageDataUrl?: string;
+  signature?: FrameSignature;
+};
+
 const CONTINUOUS_CHAT_AUDIO_LEVEL_POLL_MS = 100;
 const CONTINUOUS_CHAT_MIN_RECORDING_MS = 900;
 const CONTINUOUS_CHAT_SILENCE_MS = 1_100;
@@ -242,6 +257,21 @@ function buildDownloadDataUrl(contentType: string, content: string): string {
   return `data:${contentType};charset=utf-8,${encodeURIComponent(content)}`;
 }
 
+function downloadTextFile(
+  content: string,
+  contentType: string,
+  filename: string,
+): void {
+  const objectUrl = URL.createObjectURL(
+    new Blob([content], { type: `${contentType};charset=utf-8` }),
+  );
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
 type CapturedFrame = {
   frameDataUrl: string;
   signature: FrameSignature;
@@ -290,6 +320,11 @@ export function AssistantWorkspace(): React.JSX.Element {
   const [chatVoiceSendMode, setChatVoiceSendMode] =
     useState<ChatVoiceSendMode>("auto-send");
   const [textDraft, setTextDraft] = useState("");
+  const [retryableChatTurns, setRetryableChatTurns] = useState<
+    Readonly<Record<string, RetryableChatTurn>>
+  >({});
+  const [isClearConfirmationVisible, setIsClearConfirmationVisible] =
+    useState(false);
   const nextEntryIdRef = useRef(initialTranscript.length);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -303,7 +338,11 @@ export function AssistantWorkspace(): React.JSX.Element {
   const hasActiveSession = isActiveSession(assistantPhase);
 
   const addTranscript = useCallback(
-    (speaker: TranscriptSpeaker, text: string): void => {
+    (
+      speaker: TranscriptSpeaker,
+      text: string,
+      deliveryStatus?: TranscriptEntry["deliveryStatus"],
+    ): string => {
       const id = `entry-${nextEntryIdRef.current}`;
       nextEntryIdRef.current += 1;
 
@@ -314,8 +353,22 @@ export function AssistantWorkspace(): React.JSX.Element {
           speaker,
           text,
           createdAt: Date.now(),
+          ...(deliveryStatus === undefined ? {} : { deliveryStatus }),
         },
       ]);
+
+      return id;
+    },
+    [],
+  );
+
+  const setTranscriptDeliveryStatus = useCallback(
+    (entryId: string, deliveryStatus: TranscriptEntry["deliveryStatus"]): void => {
+      setTranscript((current) =>
+        current.map((entry) =>
+          entry.id === entryId ? { ...entry, deliveryStatus } : entry,
+        ),
+      );
     },
     [],
   );
@@ -395,6 +448,10 @@ export function AssistantWorkspace(): React.JSX.Element {
   const isChatVoiceRecording = transcriptionState.status === "recording";
   const isChatVoiceTranscribing = transcriptionState.status === "transcribing";
   const isChatVoiceBusy = isChatVoiceRecording || isChatVoiceTranscribing;
+  const retryableEntryIds = useMemo(
+    () => new Set(Object.keys(retryableChatTurns)),
+    [retryableChatTurns],
+  );
   const usageExport = useMemo(() => {
     const generatedAt = Date.now();
 
@@ -657,6 +714,7 @@ export function AssistantWorkspace(): React.JSX.Element {
 
   const sendChatTurn = useCallback(
     async (input: {
+      userEntryId: string;
       message: string;
       imageDataUrl?: string;
       signature?: FrameSignature;
@@ -675,9 +733,31 @@ export function AssistantWorkspace(): React.JSX.Element {
 
       if (response === null) {
         setAssistantPhase("error");
+        setTranscriptDeliveryStatus(input.userEntryId, "failed");
+        setRetryableChatTurns((current) => ({
+          ...current,
+          [input.userEntryId]: {
+            message: input.message,
+            ...(input.imageDataUrl === undefined
+              ? {}
+              : { imageDataUrl: input.imageDataUrl }),
+            ...(input.signature === undefined
+              ? {}
+              : { signature: input.signature }),
+          },
+        }));
         addTranscript("system", "Chat Completions 请求失败，请检查配置或稍后重试。");
         return false;
       }
+
+      setTranscriptDeliveryStatus(input.userEntryId, "sent");
+      setRetryableChatTurns((current) =>
+        Object.fromEntries(
+          Object.entries(current).filter(
+            ([entryId]) => entryId !== input.userEntryId,
+          ),
+        ),
+      );
 
       if (input.signature !== undefined) {
         recordUploadedFrame(input.signature);
@@ -703,6 +783,7 @@ export function AssistantWorkspace(): React.JSX.Element {
       recordUploadedFrame,
       responseBudget,
       sendChatCompletion,
+      setTranscriptDeliveryStatus,
       speakChatAnswer,
     ],
   );
@@ -803,8 +884,9 @@ export function AssistantWorkspace(): React.JSX.Element {
 
         const shouldContinue =
           source === "continuous" && continuousChatVoiceRef.current;
-        addTranscript("user", recognizedText);
+        const userEntryId = addTranscript("user", recognizedText, "sent");
         const sent = await sendChatTurn({
+          userEntryId,
           message: recognizedText,
           awaitSpeech: shouldContinue,
           forceSpeech: shouldContinue,
@@ -1216,8 +1298,9 @@ export function AssistantWorkspace(): React.JSX.Element {
         return;
       }
 
-      addTranscript("user", prompt);
+      const userEntryId = addTranscript("user", prompt, "sent");
       void sendChatTurn({
+        userEntryId,
         message: prompt,
         imageDataUrl: capturedFrame.frameDataUrl,
         signature: capturedFrame.signature,
@@ -1356,6 +1439,47 @@ export function AssistantWorkspace(): React.JSX.Element {
     addTranscript("system", "已停止朗读。");
   };
 
+  const handleRetryChatTurn = (entryId: string): void => {
+    const retryInput = retryableChatTurns[entryId];
+
+    if (
+      !isChatTurnRetryAllowed(retryInput !== undefined, chatState.isSending) ||
+      retryInput === undefined
+    ) {
+      return;
+    }
+
+    setTranscriptDeliveryStatus(entryId, "sent");
+    void sendChatTurn({ userEntryId: entryId, ...retryInput });
+  };
+
+  const handleConversationExport = (format: "json" | "md"): void => {
+    const exportedAt = Date.now();
+
+    if (format === "json") {
+      downloadTextFile(
+        serializeConversationJson(transcript, exportedAt),
+        "application/json",
+        createConversationExportFilename(exportedAt, "json"),
+      );
+      return;
+    }
+
+    downloadTextFile(
+      serializeConversationMarkdown(transcript, exportedAt),
+      "text/markdown",
+      createConversationExportFilename(exportedAt, "md"),
+    );
+  };
+
+  const handleClearConversation = (): void => {
+    cancelChatSpeech();
+    setTranscript([]);
+    setRetryableChatTurns({});
+    setIsClearConfirmationVisible(false);
+    nextEntryIdRef.current = 0;
+  };
+
   const handleTextDraftChange = (
     event: React.ChangeEvent<HTMLInputElement>,
   ): void => {
@@ -1374,9 +1498,9 @@ export function AssistantWorkspace(): React.JSX.Element {
     }
 
     if (isChatMode) {
-      addTranscript("user", message);
+      const userEntryId = addTranscript("user", message, "sent");
       setTextDraft("");
-      void sendChatTurn({ message });
+      void sendChatTurn({ userEntryId, message });
       return;
     }
 
@@ -2140,12 +2264,67 @@ export function AssistantWorkspace(): React.JSX.Element {
         </div>
 
         <div className="dialogue-board" aria-label="对话记录">
-          <div className="panel-heading">
-            <Volume2 size={18} aria-hidden="true" />
-            <span>对话</span>
+          <div className="dialogue-heading-row">
+            <div className="panel-heading">
+              <Volume2 size={18} aria-hidden="true" />
+              <span>对话</span>
+            </div>
+            <div className="conversation-actions" aria-label="对话操作">
+              <button
+                type="button"
+                onClick={() => handleConversationExport("md")}
+                disabled={transcript.length === 0}
+                title="导出 Markdown"
+                aria-label="导出 Markdown 对话记录"
+              >
+                <FileText size={15} aria-hidden="true" />
+                <span>MD</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConversationExport("json")}
+                disabled={transcript.length === 0}
+                title="导出 JSON"
+                aria-label="导出 JSON 对话记录"
+              >
+                <FileJson size={15} aria-hidden="true" />
+                <span>JSON</span>
+              </button>
+              {isClearConfirmationVisible ? (
+                <div className="conversation-clear-confirm" role="group" aria-label="确认清空对话">
+                  <span>确认清空？</span>
+                  <button type="button" onClick={handleClearConversation}>
+                    确认
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsClearConfirmationVisible(false)}
+                  >
+                    取消
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="conversation-clear-button"
+                  type="button"
+                  onClick={() => setIsClearConfirmationVisible(true)}
+                  disabled={transcript.length === 0}
+                  title="清空对话"
+                  aria-label="清空对话记录"
+                >
+                  <Trash2 size={15} aria-hidden="true" />
+                  <span>清空</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          <TranscriptList entries={transcript} />
+          <TranscriptList
+            entries={transcript}
+            isRetryDisabled={chatState.isSending}
+            retryableEntryIds={retryableEntryIds}
+            onRetry={handleRetryChatTurn}
+          />
 
           <form
             className="text-composer"
