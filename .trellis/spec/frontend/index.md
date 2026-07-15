@@ -22,6 +22,7 @@
 | [components.md](./components.md)                 | UI components, routing, rendering    | Reference       |
 | [quality.md](./quality.md)                       | Performance, accessibility, testing  | Reference       |
 | [workspace-layout.md](./workspace-layout.md)     | Adaptive workspace layout contract   | Reference       |
+| [conversation-productivity.md](./conversation-productivity.md) | Transcript actions, retry, export, and long-history contract | Reference |
 
 ---
 
@@ -44,6 +45,7 @@
 | Implement authentication          | [authentication.md](./authentication.md)             |
 | Ensure type safety                | [type-safety.md](./type-safety.md)                   |
 | Customize workspace layout       | [workspace-layout.md](./workspace-layout.md)         |
+| Extend conversation productivity | [conversation-productivity.md](./conversation-productivity.md) |
 
 ### Before Committing
 
