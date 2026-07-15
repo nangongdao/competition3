@@ -12,6 +12,7 @@ export default tseslint.config(
       "node_modules/",
       ".trellis/",
       ".wrangler/",
+      "worker-configuration.d.ts",
     ],
   },
   js.configs.recommended,

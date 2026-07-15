@@ -19,7 +19,18 @@
     "paths": {
       "@/*": ["./app/*"]
     },
-    "types": ["@cloudflare/workers-types", "vite/client"]
+    "types": [
+      "@cloudflare/vitest-pool-workers/types",
+      "node",
+      "vite/client"
+    ]
   },
-  "include": ["app", "src", "vite.config.ts", "eslint.config.mjs"]
+  "include": [
+    "app",
+    "src",
+    "vite.config.ts",
+    "vitest.worker.config.ts",
+    "eslint.config.mjs",
+    "worker-configuration.d.ts"
+  ]
 }

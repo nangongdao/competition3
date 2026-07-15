@@ -1,24 +1,19 @@
-import type { UpstreamCircuitBreaker } from "./durable-objects/upstream-circuit-breaker";
+type WidenGeneratedBinding<T> = T extends string ? string : T;
 
-export type CloudflareBindings = {
-  ASSETS: Fetcher;
-  UPSTREAM_CIRCUIT_BREAKER?: DurableObjectNamespace<UpstreamCircuitBreaker>;
-  ENVIRONMENT?: string;
+type GeneratedWorkerBindings = {
+  ASSETS: Cloudflare.Env["ASSETS"];
+} & {
+  [Key in Exclude<keyof Cloudflare.Env, "ASSETS">]?: WidenGeneratedBinding<
+    Cloudflare.Env[Key]
+  >;
+};
+
+export type CloudflareBindings = GeneratedWorkerBindings & {
   OPENAI_API_KEY?: string;
-  OPENAI_PROVIDER_MODE?: string;
-  OPENAI_BASE_URL?: string;
   OPENAI_CHAT_BASE_URL?: string;
-  OPENAI_CHAT_COMPLETIONS_PATH?: string;
   OPENAI_CHAT_COMPLETIONS_URL?: string;
-  OPENAI_CHAT_MODEL?: string;
-  OPENAI_CHAT_TOKEN_LIMIT_PARAMETER?: string;
-  OPENAI_CHAT_VISION_INPUT?: string;
   OPENAI_TRANSCRIPTION_API_KEY?: string;
-  OPENAI_TRANSCRIPTION_BASE_URL?: string;
-  OPENAI_TRANSCRIPTIONS_PATH?: string;
   OPENAI_TRANSCRIPTIONS_URL?: string;
-  OPENAI_TRANSCRIPTION_MODEL?: string;
-  OPENAI_TRANSCRIPTION_LANGUAGE?: string;
   OPENAI_REALTIME_BASE_URL?: string;
   OPENAI_REALTIME_SESSION_PATH?: string;
   OPENAI_REALTIME_WEBRTC_PATH?: string;
