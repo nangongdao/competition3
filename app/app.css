@@ -977,6 +977,87 @@ h1 {
   color: #d7ff65;
 }
 
+.dialogue-heading-row,
+.conversation-actions,
+.conversation-clear-confirm {
+  display: flex;
+  align-items: center;
+}
+
+.dialogue-heading-row {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.conversation-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.conversation-actions > button,
+.conversation-clear-confirm button,
+.transcript-entry-actions button,
+.transcript-history-control button,
+.transcript-jump-latest {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 9px;
+  color: rgba(248, 244, 234, 0.8);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+  background: rgba(248, 244, 234, 0.08);
+  border: 1px solid rgba(248, 244, 234, 0.18);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.conversation-actions > button:not(:disabled):hover,
+.conversation-clear-confirm button:hover,
+.transcript-entry-actions button:not(:disabled):hover,
+.transcript-history-control button:hover,
+.transcript-jump-latest:hover {
+  color: #101510;
+  background: #d7ff65;
+  border-color: #d7ff65;
+}
+
+.conversation-actions button:focus-visible,
+.transcript-entry-actions button:focus-visible,
+.transcript-history-control button:focus-visible,
+.transcript-jump-latest:focus-visible {
+  outline: 2px solid #d7ff65;
+  outline-offset: 2px;
+}
+
+.conversation-actions button:disabled,
+.transcript-entry-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.conversation-clear-button:not(:disabled) {
+  color: #ffaaa2;
+}
+
+.conversation-clear-confirm {
+  gap: 5px;
+  padding-left: 6px;
+  color: #ffaaa2;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.conversation-clear-confirm button:first-of-type {
+  color: #fff;
+  background: rgba(255, 111, 97, 0.24);
+  border-color: rgba(255, 111, 97, 0.48);
+}
+
 .frame-sample {
   min-height: 104px;
   overflow: hidden;
@@ -1035,9 +1116,17 @@ h1 {
   font-weight: 900;
 }
 
+.transcript-scroll-region {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .transcript-list {
   display: grid;
+  align-content: start;
   gap: 10px;
+  height: 100%;
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -1062,11 +1151,26 @@ h1 {
   border-left-color: #ff6f61;
 }
 
-.transcript-entry div {
+.transcript-entry[data-delivery-status="failed"] {
+  background: rgba(255, 111, 97, 0.12);
+  border-left-color: #ff6f61;
+}
+
+.transcript-entry-heading,
+.transcript-entry-meta,
+.transcript-entry-actions {
   display: flex;
   align-items: center;
+}
+
+.transcript-entry-heading {
   justify-content: space-between;
   gap: 12px;
+}
+
+.transcript-entry-meta,
+.transcript-entry-actions {
+  gap: 8px;
 }
 
 .transcript-entry strong {
@@ -1224,6 +1328,75 @@ h1 {
   }
 }
 
+.transcript-failed-label {
+  color: #ffaaa2;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.transcript-entry-actions {
+  justify-content: flex-end;
+  min-height: 0;
+}
+
+.transcript-entry-actions button {
+  min-height: 26px;
+  padding: 3px 7px;
+  background: transparent;
+  border-color: transparent;
+}
+
+.transcript-history-control {
+  display: flex;
+  justify-content: center;
+}
+
+.transcript-jump-latest {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  color: #101510;
+  background: #d7ff65;
+  border-color: rgba(16, 21, 16, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.transcript-empty {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  min-height: 180px;
+  padding: 24px;
+  color: rgba(248, 244, 234, 0.58);
+  text-align: center;
+  background: rgba(248, 244, 234, 0.04);
+  border: 1px dashed rgba(248, 244, 234, 0.18);
+  border-radius: 8px;
+}
+
+.transcript-empty strong {
+  color: #f8f4ea;
+}
+
+.transcript-empty span {
+  max-width: 38ch;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media (max-width: 620px) {
   .session-column,
   .vision-column {
@@ -1256,6 +1429,21 @@ h1 {
 
   .usage-export-actions {
     justify-content: flex-start;
+  }
+
+  .dialogue-heading-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .conversation-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .conversation-clear-confirm {
+    flex-wrap: wrap;
+    padding-left: 0;
   }
 
   .control-grid,
