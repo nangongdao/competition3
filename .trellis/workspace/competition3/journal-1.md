@@ -785,3 +785,74 @@ Added OPENAI_TRANSCRIPTION_API_KEY for Worker speech transcription with shared-k
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: Adaptive assistant workspace layout
+
+**Date**: 2026-07-15
+**Task**: Adaptive assistant workspace layout
+**Branch**: `feat/adaptive-workspace-layout`
+
+### Summary
+
+Implemented focus modes, collapsible auxiliary panels, desktop panel reorder and resizing, validated local layout persistence, deterministic mobile fallback, and memoized transcript rendering; verified lint, typecheck, 94 tests, and production build; opened PR #26.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e4cba90` | (see git log) |
+| `e6a5eeb` | (see git log) |
+| `f2eeb9e` | (see git log) |
+| `d5ec949` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 25: Conversation productivity and long-history performance
+
+**Date**: 2026-07-15
+**Task**: Conversation productivity and long-history performance
+**Branch**: `feat/conversation-productivity-performance`
+
+### Summary
+
+Added accessible message copy and Chat retry, privacy-limited Markdown/JSON export, confirmed clearing, bounded long-history rendering, stable scroll navigation, responsive UI polish, tests, browser smoke coverage, and frontend executable contracts. PR #27 opened via GitHub API fallback after Git HTTPS transport failures.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `237e988` | (see git log) |
+| `6f35084` | (see git log) |
+| `d394300` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

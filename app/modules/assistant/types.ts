@@ -34,6 +34,7 @@ export type TranscriptEntry = {
   speaker: TranscriptSpeaker;
   text: string;
   createdAt: number;
+  deliveryStatus?: "sent" | "failed";
 };
 
 export type CostControlSetting = {
