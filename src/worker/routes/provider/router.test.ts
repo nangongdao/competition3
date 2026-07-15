@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import app from "../../index";
+import app from "../../app";
 import type { CloudflareBindings } from "../../types";
 import type { ProviderConfigResponse } from "./types";
 

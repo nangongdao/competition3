@@ -39,6 +39,9 @@ export default tseslint.config(
         ...globals.serviceworker,
       },
     },
+    rules: {
+      "no-console": ["error", { allow: ["info", "warn", "error"] }],
+    },
   },
   {
     files: ["app/**/*.{ts,tsx}"],

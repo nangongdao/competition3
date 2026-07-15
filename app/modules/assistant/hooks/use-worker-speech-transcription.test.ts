@@ -40,6 +40,16 @@ describe("worker speech transcription helpers", () => {
     ).toBe("语音转文字调用失败：model not found");
   });
 
+  it("localizes temporary transcription availability failures", () => {
+    expect(
+      getLocalizedSpeechApiErrorMessage({
+        success: false,
+        code: "transcription_circuit_open",
+        error: "Transcription provider is temporarily unavailable.",
+      }),
+    ).toBe("语音转文字服务暂时不可用，请稍后重试。");
+  });
+
   it("localizes missing transcription credentials", () => {
     expect(
       getLocalizedSpeechApiErrorMessage({

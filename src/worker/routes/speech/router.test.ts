@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import app from "../../index";
+import app from "../../app";
+import { createOpenCircuitNamespace } from "../../test-utils/open-circuit";
 import type { CloudflareBindings } from "../../types";
 import type {
   SpeechApiErrorResponse,
@@ -71,6 +72,29 @@ describe("speech transcription route", () => {
     expect(body.code).toBe("missing_openai_api_key");
   });
 
+  it("fails fast with a stable error when the transcription circuit is open", async () => {
+    const fetchMock = vi.fn((): Promise<Response> => Promise.resolve(Response.json({})));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/speech/transcription",
+      {
+        method: "POST",
+        body: createAudioFormData(),
+      },
+      createEnv({
+        OPENAI_TRANSCRIPTION_API_KEY: "transcription-key",
+        UPSTREAM_CIRCUIT_BREAKER: createOpenCircuitNamespace(),
+      }),
+    );
+    const body = await readJson<SpeechApiErrorResponse>(response);
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("3");
+    expect(body.code).toBe("transcription_circuit_open");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("uses OPENAI_TRANSCRIPTION_API_KEY before OPENAI_API_KEY", async () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -108,9 +132,11 @@ describe("speech transcription route", () => {
       throw new Error("Expected upstream fetch to be called.");
     }
 
-    expect(firstCall[1]?.headers).toEqual({
+    expect(firstCall[1]?.headers).toEqual(expect.objectContaining({
       Authorization: "Bearer transcription-key",
-    });
+      "Idempotency-Key": expect.any(String),
+      "X-Request-Id": expect.any(String),
+    }));
   });
 
   it("returns 503 for invalid transcription provider configuration", async () => {
@@ -250,7 +276,8 @@ describe("speech transcription route", () => {
     expect(response.status).toBe(502);
     expect(body.success).toBe(false);
     expect(body.code).toBe("transcription_failed");
-    expect(body.error).toBe("transcription model not found");
+    expect(body.error).toBe("Transcription provider rejected the request.");
+    expect(body.error).not.toContain("transcription model not found");
   });
 
   it("returns 502 when the provider response has no transcript text", async () => {
@@ -335,9 +362,11 @@ describe("speech transcription route", () => {
     expect(String(firstCall[0])).toBe(
       "https://third-party.example/v1/audio/transcriptions",
     );
-    expect(firstCall[1]?.headers).toEqual({
+    expect(firstCall[1]?.headers).toEqual(expect.objectContaining({
       Authorization: "Bearer provider-key",
-    });
+      "Idempotency-Key": expect.any(String),
+      "X-Request-Id": expect.any(String),
+    }));
 
     const upstreamBody = readMockRequestFormData(firstCall[1]);
     expect(upstreamBody.get("model")).toBe("configured-transcribe-model");

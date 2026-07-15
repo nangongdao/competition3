@@ -1,5 +1,8 @@
+import type { UpstreamCircuitBreaker } from "./durable-objects/upstream-circuit-breaker";
+
 export type CloudflareBindings = {
   ASSETS: Fetcher;
+  UPSTREAM_CIRCUIT_BREAKER?: DurableObjectNamespace<UpstreamCircuitBreaker>;
   ENVIRONMENT?: string;
   OPENAI_API_KEY?: string;
   OPENAI_PROVIDER_MODE?: string;
@@ -27,6 +30,9 @@ export type CloudflareBindings = {
 
 export type AppEnv = {
   Bindings: CloudflareBindings;
+  Variables: {
+    requestId: string;
+  };
 };
 
 export type HealthResponse = {

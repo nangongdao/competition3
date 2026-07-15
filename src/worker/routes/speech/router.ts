@@ -1,6 +1,11 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 
+import {
+  executeUpstreamRequest,
+  UpstreamRequestError,
+} from "../../lib/upstream/resilience";
+import { readJsonResponseBounded } from "../../lib/upstream/response";
 import type { AppEnv } from "../../types";
 import {
   speechTranscriptionLanguageSchema,
@@ -15,7 +20,7 @@ const DEFAULT_TRANSCRIPTIONS_PATH = "/audio/transcriptions";
 const DEFAULT_TRANSCRIPTION_MODEL = "whisper-1";
 const MAX_AUDIO_UPLOAD_BYTES = 10_000_000;
 const MAX_MULTIPART_UPLOAD_BYTES = 11_000_000;
-const MAX_UPSTREAM_ERROR_SNIPPET_CHARS = 600;
+const TRANSCRIPTION_UPSTREAM_TIMEOUT_MS = 45_000;
 const SUPPORTED_AUDIO_TYPES = new Set([
   "audio/aac",
   "audio/flac",
@@ -39,11 +44,6 @@ type TranscriptionProviderConfig = {
 type TranscriptionInput = {
   audioFile: File;
   language: SpeechTranscriptionLanguage;
-};
-
-type UpstreamResponseBody = {
-  value: unknown;
-  textSnippet: string | null;
 };
 
 export const speechRoutes = new Hono<AppEnv>();
@@ -79,41 +79,61 @@ speechRoutes.post("/transcription", async (c) => {
     return c.json(inputResult.errorResponse, inputResult.status);
   }
 
-  const formData = new FormData();
-  formData.set("model", providerConfig.model);
-  formData.set("response_format", "json");
-  formData.set(
-    "file",
-    inputResult.input.audioFile,
-    getUploadFileName(inputResult.input.audioFile),
-  );
-
   const transcriptionLanguage =
     inputResult.input.language ?? providerConfig.language;
+  let upstreamResponse: Response;
 
-  if (transcriptionLanguage !== undefined) {
-    formData.set("language", transcriptionLanguage);
+  try {
+    upstreamResponse = await executeUpstreamRequest({
+      env: c.env,
+      operation: "transcription",
+      url: providerConfig.transcriptionsUrl,
+      requestId: c.get("requestId"),
+      requestSignal: c.req.raw.signal,
+      policy: {
+        timeoutMs: TRANSCRIPTION_UPSTREAM_TIMEOUT_MS,
+        maxAttempts: 2,
+      },
+      buildRequestInit: (idempotencyKey): RequestInit => {
+        const formData = new FormData();
+        formData.set("model", providerConfig.model);
+        formData.set("response_format", "json");
+        formData.set(
+          "file",
+          inputResult.input.audioFile,
+          getUploadFileName(inputResult.input.audioFile),
+        );
+
+        if (transcriptionLanguage !== undefined) {
+          formData.set("language", transcriptionLanguage);
+        }
+
+        return {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Idempotency-Key": idempotencyKey,
+            "X-Request-Id": c.get("requestId"),
+          },
+          body: formData,
+        };
+      },
+    });
+  } catch (error: unknown) {
+    return createUpstreamFailureResponse(c, error);
   }
-
-  const upstreamResponse = await fetch(providerConfig.transcriptionsUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: formData,
-  });
-  const upstreamBody = await readUpstreamBody(upstreamResponse);
 
   if (!upstreamResponse.ok) {
     return c.json(
       createErrorResponse(
-        getUpstreamErrorMessage(upstreamBody) ??
-          `Transcription provider request failed with status ${upstreamResponse.status}.`,
+        "Transcription provider rejected the request.",
         "transcription_failed",
       ),
       502,
     );
   }
+
+  const upstreamBody = await readJsonResponseBounded(upstreamResponse);
 
   const text = getTranscriptionText(upstreamBody.value);
 
@@ -441,82 +461,58 @@ function getAudioFileExtension(contentType: string): string {
   return "webm";
 }
 
-async function readUpstreamBody(response: Response): Promise<UpstreamResponseBody> {
-  const text = await response.text();
-
-  if (text.trim().length === 0) {
-    return {
-      value: null,
-      textSnippet: null,
-    };
+function createUpstreamFailureResponse(
+  c: Context<AppEnv>,
+  error: unknown,
+): Response {
+  if (!(error instanceof UpstreamRequestError)) {
+    throw error;
   }
 
-  try {
-    return {
-      value: JSON.parse(text) as unknown,
-      textSnippet: createTextSnippet(text),
-    };
-  } catch {
-    return {
-      value: null,
-      textSnippet: createTextSnippet(text),
-    };
-  }
-}
-
-function createTextSnippet(value: string): string | null {
-  const collapsedValue = value.replace(/\s+/g, " ").trim();
-
-  if (collapsedValue.length === 0) {
-    return null;
+  if (error.retryAfterSeconds !== undefined) {
+    c.header("Retry-After", String(error.retryAfterSeconds));
   }
 
-  if (collapsedValue.length <= MAX_UPSTREAM_ERROR_SNIPPET_CHARS) {
-    return collapsedValue;
-  }
-
-  return `${collapsedValue.slice(0, MAX_UPSTREAM_ERROR_SNIPPET_CHARS)}...`;
-}
-
-function getUpstreamErrorMessage(body: UpstreamResponseBody): string | undefined {
-  const structuredMessage = getStructuredUpstreamErrorMessage(body.value);
-
-  if (structuredMessage !== undefined) {
-    return structuredMessage;
-  }
-
-  return body.textSnippet === null
-    ? undefined
-    : `Provider returned ${body.textSnippet}`;
-}
-
-function getStructuredUpstreamErrorMessage(value: unknown): string | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
-  }
-
-  if ("error" in value) {
-    const errorValue = value.error;
-
-    if (
-      typeof errorValue === "object" &&
-      errorValue !== null &&
-      "message" in errorValue &&
-      typeof errorValue.message === "string"
-    ) {
-      return errorValue.message;
+  const errorMap: Record<
+    UpstreamRequestError["kind"],
+    {
+      code: SpeechApiErrorCode;
+      message: string;
+      status: 408 | 502 | 503 | 504;
     }
+  > = {
+    cancelled: {
+      code: "request_cancelled",
+      message: "Transcription request was cancelled.",
+      status: 408,
+    },
+    "circuit-open": {
+      code: "transcription_circuit_open",
+      message: "Transcription provider is temporarily unavailable.",
+      status: 503,
+    },
+    "rate-limited": {
+      code: "transcription_rate_limited",
+      message: "Transcription provider is temporarily rate limited.",
+      status: 503,
+    },
+    timeout: {
+      code: "transcription_timeout",
+      message: "Transcription provider timed out.",
+      status: 504,
+    },
+    unavailable: {
+      code: "transcription_unavailable",
+      message: "Transcription provider is temporarily unavailable.",
+      status: 502,
+    },
+  };
+  const mappedError = errorMap[error.kind];
 
-    if (typeof errorValue === "string") {
-      return errorValue;
-    }
-  }
-
-  if ("message" in value && typeof value.message === "string") {
-    return value.message;
-  }
-
-  return undefined;
+  return c.json(
+    createErrorResponse(mappedError.message, mappedError.code),
+    mappedError.status,
+  );
 }
 
 function getTranscriptionText(value: unknown): string | null {

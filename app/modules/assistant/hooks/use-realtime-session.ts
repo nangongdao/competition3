@@ -230,6 +230,25 @@ function getLocalizedApiErrorMessage(errorResponse: ApiErrorResponse): string {
     return "Realtime 会话请求参数无效。";
   }
 
+  if (errorResponse.code === "realtime_timeout") {
+    return "Realtime 服务响应超时，请稍后重试。";
+  }
+
+  if (errorResponse.code === "realtime_rate_limited") {
+    return "Realtime 服务当前请求过多，请稍后重试。";
+  }
+
+  if (
+    errorResponse.code === "realtime_circuit_open" ||
+    errorResponse.code === "realtime_unavailable"
+  ) {
+    return "Realtime 服务暂时不可用，请稍后重试。";
+  }
+
+  if (errorResponse.code === "request_cancelled") {
+    return "Realtime 会话请求已取消。";
+  }
+
   if (errorResponse.code === "openai_session_failed") {
     return `OpenAI 会话创建失败：${errorResponse.error}`;
   }
