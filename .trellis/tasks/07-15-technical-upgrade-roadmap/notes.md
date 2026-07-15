@@ -60,3 +60,9 @@
 - Performance method: create stable component boundaries first, then add memoization only where prop/state flow shows meaningful render isolation.
 - Confirmed personalization scope: focus modes, collapsible panels, desktop reorder/resize, local preference persistence, reset action, and deterministic mobile fallback.
 - Privacy boundary: layout persistence must never include prompts, transcripts, captured media, provider URLs, or credentials.
+
+## Delivery
+
+- Branch: `feat/adaptive-workspace-layout`
+- Pull request: https://github.com/nangongdao/competition3/pull/26
+- Git HTTPS push failed after the permitted normal and HTTP/1.1 attempts; the remote branch was created with the documented small-blob Git Data API flow.

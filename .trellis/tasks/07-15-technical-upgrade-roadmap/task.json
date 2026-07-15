@@ -1,7 +1,7 @@
 {
   "id": "technical-upgrade-roadmap",
   "name": "technical-upgrade-roadmap",
-  "title": "规划项目技术升级路线",
+  "title": "Adaptive workspace layout",
   "description": "",
   "status": "in_progress",
   "dev_type": null,
@@ -16,7 +16,7 @@
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
-  "pr_url": null,
+  "pr_url": "https://github.com/nangongdao/competition3/pull/26",
   "subtasks": [],
   "children": [],
   "parent": null,
