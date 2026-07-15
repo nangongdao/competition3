@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 24
+- **Total Sessions**: 25
 - **Last Active**: 2026-07-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~823 | Active |
+| `journal-1.md` | ~858 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 25 | 2026-07-15 | Conversation productivity and long-history performance | `237e988`, `6f35084`, `d394300` | `feat/conversation-productivity-performance` |
 | 24 | 2026-07-15 | Adaptive assistant workspace layout | `e4cba90`, `e6a5eeb`, `f2eeb9e`, `d5ec949` | `feat/adaptive-workspace-layout` |
 | 23 | 2026-06-14 | Separate ASR API key | `8006c3b` | `feat/worker-backed-chat-speech-transcription` |
 | 22 | 2026-06-14 | Worker-backed Chat Speech Transcription | `733da95` | `feat/worker-backed-chat-speech-transcription` |
