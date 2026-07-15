@@ -7,6 +7,7 @@ import {
   Gauge,
   Image as ImageIcon,
   Hand,
+  GripVertical,
   Mic,
   MicOff,
   Play,
@@ -24,6 +25,9 @@ import { useBrowserSpeechAdapter } from "@/modules/assistant/hooks/use-browser-s
 import { useMediaCapture } from "@/modules/assistant/hooks/use-media-capture";
 import { useProviderConfig } from "@/modules/assistant/hooks/use-provider-config";
 import { useWorkerSpeechTranscription } from "@/modules/assistant/hooks/use-worker-speech-transcription";
+import { useWorkspaceLayout } from "@/modules/assistant/hooks/use-workspace-layout";
+import { WorkspaceLayoutToolbar } from "@/modules/assistant/components/workspace-layout-toolbar";
+import { TranscriptList } from "@/modules/assistant/components/transcript-list";
 import {
   REALTIME_IDLE_DISCONNECT_MS,
   REALTIME_IDLE_WARNING_MS,
@@ -225,26 +229,6 @@ function calculateAudioRootMeanSquare(samples: Uint8Array): number {
   return Math.sqrt(squaredTotal / samples.length);
 }
 
-function formatEntryTime(timestamp: number): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(timestamp);
-}
-
-function getSpeakerLabel(speaker: TranscriptSpeaker): string {
-  if (speaker === "assistant") {
-    return "AI";
-  }
-
-  if (speaker === "user") {
-    return "你";
-  }
-
-  return "系统";
-}
-
 function isActiveSession(phase: AssistantPhase): boolean {
   return (
     phase === "connecting" ||
@@ -264,6 +248,16 @@ type CapturedFrame = {
 };
 
 export function AssistantWorkspace(): React.JSX.Element {
+  const assistantShellRef = useRef<HTMLElement | null>(null);
+  const draggedPanelRef = useRef<"session" | "vision" | null>(null);
+  const {
+    layout,
+    resetLayout,
+    setFocusMode,
+    setSessionWidthPercent,
+    swapPanels,
+    togglePanel,
+  } = useWorkspaceLayout();
   const { mediaState, requestAccess, stopAccess, stream } = useMediaCapture();
   const {
     providerMode,
@@ -1560,9 +1554,93 @@ export function AssistantWorkspace(): React.JSX.Element {
     ? "按住说话只用于 Realtime 模式；Chat 模式请使用右侧语音输入或键盘输入。"
     : "按住时发送麦克风音频，松开后提交给 Realtime 模型。";
 
+  const handleWorkspaceResizeStart = (
+    event: React.PointerEvent<HTMLButtonElement>,
+  ): void => {
+    const shell = assistantShellRef.current;
+
+    if (shell === null || window.matchMedia("(max-width: 980px)").matches) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    const handlePointerMove = (pointerEvent: PointerEvent): void => {
+      const bounds = shell.getBoundingClientRect();
+      const pointerPercent = ((pointerEvent.clientX - bounds.left) / bounds.width) * 100;
+      const sessionWidthPercent =
+        layout.panelOrder[0] === "session" ? pointerPercent : 100 - pointerPercent;
+      setSessionWidthPercent(sessionWidthPercent);
+    };
+
+    const handlePointerEnd = (): void => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerEnd);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerEnd, { once: true });
+  };
+
+  const handlePanelDragStart = (
+    event: React.DragEvent<HTMLElement>,
+    panel: "session" | "vision",
+  ): void => {
+    if (window.matchMedia("(max-width: 980px)").matches) {
+      event.preventDefault();
+      return;
+    }
+
+    draggedPanelRef.current = panel;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", panel);
+  };
+
+  const handlePanelDrop = (
+    event: React.DragEvent<HTMLElement>,
+    targetPanel: "session" | "vision",
+  ): void => {
+    event.preventDefault();
+
+    if (draggedPanelRef.current !== null && draggedPanelRef.current !== targetPanel) {
+      swapPanels();
+    }
+
+    draggedPanelRef.current = null;
+  };
+
   return (
-    <main className="assistant-shell">
-      <section className="session-column" aria-labelledby="assistant-title">
+    <main
+      ref={assistantShellRef}
+      className="assistant-shell"
+      data-focus-mode={layout.focusMode}
+      data-session-first={layout.panelOrder[0] === "session" ? "true" : "false"}
+      style={{ "--session-width": `${layout.sessionWidthPercent}%` } as React.CSSProperties}
+    >
+      <WorkspaceLayoutToolbar
+        layout={layout}
+        onFocusModeChange={setFocusMode}
+        onReset={resetLayout}
+        onSessionWidthChange={setSessionWidthPercent}
+        onSwapPanels={swapPanels}
+        onTogglePanel={togglePanel}
+      />
+
+      <section
+        className="session-column workspace-region"
+        aria-labelledby="assistant-title"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => handlePanelDrop(event, "session")}
+      >
+        <div
+          className="workspace-region-grip"
+          draggable
+          aria-hidden="true"
+          onDragStart={(event) => handlePanelDragStart(event, "session")}
+        >
+          <GripVertical size={17} />
+          拖动控制区
+        </div>
         <div className="product-header">
           <div className="brand-mark" aria-hidden="true">
             <Radio size={25} strokeWidth={2.2} />
@@ -1676,7 +1754,11 @@ export function AssistantWorkspace(): React.JSX.Element {
           关闭本地设备
         </button>
 
-        <div className="cost-panel" aria-label="成本与模式">
+        <div
+          className="cost-panel"
+          aria-label="成本与模式"
+          hidden={!layout.panelVisibility.cost}
+        >
           <div className="panel-heading">
             <Gauge size={18} aria-hidden="true" />
             <span>成本控制</span>
@@ -1901,7 +1983,11 @@ export function AssistantWorkspace(): React.JSX.Element {
           </div>
         </div>
 
-        <div className="usage-panel" aria-label="Realtime 用量">
+        <div
+          className="usage-panel"
+          aria-label="Realtime 用量"
+          hidden={!layout.panelVisibility.usage}
+        >
           <div className="usage-heading-row">
             <div className="panel-heading">
               <Activity size={18} aria-hidden="true" />
@@ -1980,7 +2066,31 @@ export function AssistantWorkspace(): React.JSX.Element {
         </div>
       </section>
 
-      <section className="vision-column" aria-labelledby="vision-title">
+      <button
+        className="workspace-resize-handle"
+        type="button"
+        aria-label="调整工作台区域宽度"
+        title="拖动调整区域宽度"
+        onPointerDown={handleWorkspaceResizeStart}
+      >
+        <GripVertical size={18} aria-hidden="true" />
+      </button>
+
+      <section
+        className="vision-column workspace-region"
+        aria-labelledby="vision-title"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => handlePanelDrop(event, "vision")}
+      >
+        <div
+          className="workspace-region-grip workspace-region-grip-dark"
+          draggable
+          aria-hidden="true"
+          onDragStart={(event) => handlePanelDragStart(event, "vision")}
+        >
+          <GripVertical size={17} />
+          拖动画面区
+        </div>
         <div className="camera-stage">
           <video
             ref={videoRef}
@@ -2035,19 +2145,7 @@ export function AssistantWorkspace(): React.JSX.Element {
             <span>对话</span>
           </div>
 
-          <ol className="transcript-list">
-            {transcript.map((entry) => (
-              <li className={`transcript-entry ${entry.speaker}`} key={entry.id}>
-                <div>
-                  <strong>{getSpeakerLabel(entry.speaker)}</strong>
-                  <time dateTime={new Date(entry.createdAt).toISOString()}>
-                    {formatEntryTime(entry.createdAt)}
-                  </time>
-                </div>
-                <p>{entry.text}</p>
-              </li>
-            ))}
-          </ol>
+          <TranscriptList entries={transcript} />
 
           <form
             className="text-composer"
@@ -2079,7 +2177,11 @@ export function AssistantWorkspace(): React.JSX.Element {
           </form>
         </div>
 
-        <div className="visual-context-panel" aria-label="视觉上下文">
+        <div
+          className="visual-context-panel"
+          aria-label="视觉上下文"
+          hidden={!layout.panelVisibility.visualContext}
+        >
           <div className="panel-heading">
             <ImageIcon size={18} aria-hidden="true" />
             <span>最近画面</span>
