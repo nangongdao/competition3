@@ -130,7 +130,11 @@ Environment:
 | Missing `OPENAI_CHAT_MODEL` | 503 | `{ success: false, code: "missing_chat_model" }` |
 | Invalid provider URL config | 503 | `{ success: false, code: "invalid_chat_provider_config" }` |
 | Zod validation failure | 400 | `{ success: false, code: "invalid_request" }` |
-| Provider request failure | 502 | `{ success: false, code: "chat_completion_failed" }` |
+| Provider non-retryable rejection | 502 | `{ success: false, code: "chat_completion_failed" }` |
+| Provider timeout | 504 | `{ success: false, code: "chat_completion_timeout" }` |
+| Provider rate limit after retry budget | 503 | `{ success: false, code: "chat_completion_rate_limited" }` |
+| Provider circuit open | 503 | `{ success: false, code: "chat_completion_circuit_open" }` |
+| Provider unavailable after retry budget | 502 | `{ success: false, code: "chat_completion_unavailable" }` |
 | Provider response lacks text content | 502 | `{ success: false, code: "invalid_chat_completion_response" }` |
 | Provider success | 200 | `{ success: true, answer, model }` |
 
@@ -156,12 +160,14 @@ Environment:
 - Missing chat model maps to 503.
 - Invalid provider URL configuration maps to 503.
 - Invalid input maps to 400.
-- Upstream provider failure maps to 502.
+- Non-retryable provider rejection maps to 502 without exposing its body.
+- Timeout, exhausted rate limit, circuit-open, and exhausted transient failure
+  map to their stable resilience codes and statuses.
 - Success test asserts the upstream URL, model, `max_tokens`, and text plus
   `image_url` message shape.
 - Compatibility tests assert `max_completion_tokens` mapping, omitted token
   limit behavior, disabled vision input behavior, and non-JSON upstream error
-  body surfacing.
+  body suppression.
 
 #### 7. Wrong vs Correct
 
@@ -253,7 +259,11 @@ Environment:
 | Zod validation failure | 400 | `{ success: false, code: "invalid_request" }` |
 | Invalid `turnDetectionMode` | 400 | `{ success: false, code: "invalid_request" }` |
 | Invalid `responseBudget` | 400 | `{ success: false, code: "invalid_request" }` |
-| Provider session creation failure | 502 | `{ success: false, code: "openai_session_failed" }` |
+| Provider non-retryable rejection | 502 | `{ success: false, code: "openai_session_failed" }` |
+| Provider timeout | 504 | `{ success: false, code: "realtime_timeout" }` |
+| Provider rate limit after retry budget | 503 | `{ success: false, code: "realtime_rate_limited" }` |
+| Provider circuit open | 503 | `{ success: false, code: "realtime_circuit_open" }` |
+| Provider unavailable after retry budget | 502 | `{ success: false, code: "realtime_unavailable" }` |
 | Provider success | 200 | `{ success: true, session, costPolicy }` |
 
 #### 5. Good/Base/Bad Cases
@@ -278,7 +288,8 @@ Environment:
 - Mocked provider test should assert response budget presets write
   `max_response_output_tokens` values and that brief mode appends a brevity
   instruction.
-- Mocked provider test should assert upstream failures map to 502.
+- Mocked provider tests should assert stable timeout, rate-limit, circuit-open,
+  unavailable, and non-retryable rejection mappings without body leakage.
 - Browser smoke test should confirm local media/mock mode still works when the
   session endpoint is not configured.
 
@@ -368,7 +379,11 @@ Upstream payload:
 | Non-multipart request | 400 | `{ success: false, code: "invalid_audio_upload" }` |
 | Missing, empty, too-large, or unsupported audio upload | 400/413 | `{ success: false, code: "invalid_audio_upload" }` |
 | Invalid language hint | 400 | `{ success: false, code: "invalid_audio_upload" }` |
-| Provider request failure | 502 | `{ success: false, code: "transcription_failed" }` |
+| Provider non-retryable rejection | 502 | `{ success: false, code: "transcription_failed" }` |
+| Provider timeout | 504 | `{ success: false, code: "transcription_timeout" }` |
+| Provider rate limit after retry budget | 503 | `{ success: false, code: "transcription_rate_limited" }` |
+| Provider circuit open | 503 | `{ success: false, code: "transcription_circuit_open" }` |
+| Provider unavailable after retry budget | 502 | `{ success: false, code: "transcription_unavailable" }` |
 | Provider response lacks non-empty `text` | 502 | `{ success: false, code: "invalid_transcription_response" }` |
 | Provider success | 200 | `{ success: true, text, model }` |
 
@@ -401,7 +416,9 @@ Upstream payload:
 - Invalid non-empty `OPENAI_TRANSCRIPTIONS_URL` maps to 503 instead of silently
   falling back to base/path.
 - Non-multipart, empty, and unsupported uploads map to `invalid_audio_upload`.
-- Mocked provider failure maps to 502 and surfaces provider error text.
+- Mocked provider rejection maps to 502 without exposing provider error text.
+- Timeout, exhausted rate limit, circuit-open, and exhausted transient failure
+  map to stable speech error codes and statuses.
 - Mocked provider success asserts upstream URL, authorization header, model,
   `response_format=json`, optional language, and file payload.
 - Mocked provider response without text maps to

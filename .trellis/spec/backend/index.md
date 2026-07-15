@@ -23,6 +23,7 @@
 | [hono-framework.md](./hono-framework.md) | Hono framework patterns                         | Hono-specific features          |
 | [security.md](./security.md)             | Authentication, security patterns               | Security implementation         |
 | [storage.md](./storage.md)               | KV, R2 storage, session caching                 | Caching, file storage           |
+| [upstream-resilience.md](./upstream-resilience.md) | Provider timeout, retry, safe errors, Durable Object breaker | Calling external AI providers |
 | [quality.md](./quality.md)               | Code quality guidelines                         | Before committing               |
 
 ---
@@ -98,6 +99,15 @@
 | R2 storage      | [storage.md](./storage.md) |
 | KV storage      | [storage.md](./storage.md) |
 
+### External Provider Resilience
+
+| Task | File |
+| --- | --- |
+| Timeout, retry, and cancellation | [upstream-resilience.md](./upstream-resilience.md) |
+| Safe provider errors and bounded bodies | [upstream-resilience.md](./upstream-resilience.md) |
+| Durable Object circuit breaker | [upstream-resilience.md](./upstream-resilience.md) |
+| Workers-runtime integration tests | [upstream-resilience.md](./upstream-resilience.md) |
+
 ### Hono Framework
 
 | Task                 | File                                     |
@@ -131,6 +141,7 @@
 | **Use `c.env` for environment variables** (not process.env) | [environment.md](./environment.md)           |
 | **Mount `requestContext()` first**                          | [environment.md](./environment.md)           |
 | **Use structured logger**, not `console.log`                | [error-logging.md](./error-logging.md)       |
+| **Bound and classify all provider requests**                | [upstream-resilience.md](./upstream-resilience.md) |
 | **Hash tokens before storing in database**                  | [security.md](./security.md)                 |
 | **No `any` types** (use `unknown` if needed)                | [quality.md](./quality.md)                   |
 | **Validate all inputs with Zod**                            | [quality.md](./quality.md)                   |

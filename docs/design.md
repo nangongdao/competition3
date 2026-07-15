@@ -113,6 +113,16 @@ image in 5, text in 4, text out 16, cached in 0.4):
   network failures while keeping permanent API keys and provider routing on the
   Worker. Optional answer reading still uses browser speech synthesis and does
   not create provider audio-output tokens.
+* **Upstream reliability and cost protection (implemented)**: Chat, Realtime
+  session creation, and transcription share explicit timeouts, inbound request
+  cancellation, one bounded retry with a reused idempotency key, bounded
+  provider-body reads, and stable safe errors. A provider-origin and
+  operation-sharded Durable Object persists closed/open/half-open circuit
+  state in SQLite, opens after three retry-exhausted transient failures, and
+  permits one recovery probe after cooldown. Client cancellation and
+  non-retryable provider 4xx responses do not count as provider failures.
+  Structured request/attempt logs carry request IDs and operational metadata
+  only, never keys, prompts, frames, audio, or transcripts.
 * **Compact default instructions (implemented)**: the Worker sends a short
   default Realtime instruction block.
 * **Local fallback (implemented)**: without `OPENAI_API_KEY`, the media
@@ -203,6 +213,10 @@ The final demo package is documented in
 * Chat Completions mode needs `OPENAI_CHAT_MODEL`; use a model that supports
   image input if testing camera-frame understanding, or set
   `OPENAI_CHAT_VISION_INPUT=disabled` for text-only chat models.
+* Circuit state is operationally visible through structured transition logs,
+  but there is not yet a read-only breaker health/admin endpoint. The Worker
+  deliberately fails open if the Durable Object binding cannot be reached so
+  a control-plane fault does not become a complete provider outage.
 * Chat-mode speech input depends on browser `MediaRecorder` support and a
   provider/model that supports `/audio/transcriptions` or the configured
   equivalent. Spoken answer playback still depends on browser speech synthesis
