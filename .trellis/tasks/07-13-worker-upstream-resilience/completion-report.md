@@ -44,8 +44,10 @@ Cloudflare Workers Vitest pool and Node.js type definitions; Vitest, Wrangler,
 and Workers types were updated to compatible current versions. README lists the
 testing dependency and its role.
 
-## Remaining Delivery Step
+## Pull Request
 
-Commit the focused task changes, push `feat/worker-upstream-resilience`, and
-open a pull request targeting `main` with feature, implementation, verification,
-dependency, and provenance details.
+The focused task commits are available in pull request #25 targeting `main`:
+https://github.com/nangongdao/competition3/pull/25
+
+The PR is cleanly mergeable and includes feature, implementation, verification,
+dependency, and provenance details. Merge remains a review decision.

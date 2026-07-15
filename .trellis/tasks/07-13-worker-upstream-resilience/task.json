@@ -16,7 +16,7 @@
   "base_branch": "feat/worker-backed-chat-speech-transcription",
   "worktree_path": null,
   "commit": null,
-  "pr_url": null,
+  "pr_url": "https://github.com/nangongdao/competition3/pull/25",
   "subtasks": [],
   "children": [],
   "parent": null,

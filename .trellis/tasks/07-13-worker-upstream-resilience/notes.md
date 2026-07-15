@@ -18,7 +18,9 @@
 - Reusable upstream reliability contracts are captured in
   `.trellis/spec/backend/upstream-resilience.md`.
 
-## Remaining Delivery
+## Delivery Status
 
-- Confirm the focused commit file grouping.
-- Push the task branch and open a non-empty pull request targeting `main`.
+- Focused commits are pushed on `feat/worker-upstream-resilience`.
+- Pull request #25 targets `main` and is cleanly mergeable:
+  https://github.com/nangongdao/competition3/pull/25
+- Local production/SiliconFlow defaults remain intentionally uncommitted.
