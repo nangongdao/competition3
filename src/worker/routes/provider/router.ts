@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 
+import { resolveVisionCapability } from "../../lib/vision-capability";
 import type { AppEnv } from "../../types";
 import {
   providerModeSchema,
@@ -13,9 +14,14 @@ export const providerRoutes = new Hono<AppEnv>();
 
 providerRoutes.get("/config", (c) => {
   const providerMode = resolveProviderMode(c.env.OPENAI_PROVIDER_MODE);
+  const visionCapability = resolveVisionCapability(
+    c.env.OPENAI_CHAT_MODEL,
+    c.env.OPENAI_CHAT_VISION_INPUT,
+  );
   const response: ProviderConfigResponse = {
     success: true,
     providerMode,
+    visionCapability,
   };
 
   return c.json(response);

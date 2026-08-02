@@ -19,7 +19,6 @@ const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_TRANSCRIPTIONS_PATH = "/audio/transcriptions";
 const DEFAULT_TRANSCRIPTION_MODEL = "whisper-1";
 const MAX_AUDIO_UPLOAD_BYTES = 10_000_000;
-const MAX_MULTIPART_UPLOAD_BYTES = 11_000_000;
 const TRANSCRIPTION_UPSTREAM_TIMEOUT_MS = 45_000;
 const SUPPORTED_AUDIO_TYPES = new Set([
   "audio/aac",
@@ -293,22 +292,8 @@ async function readTranscriptionInput(
       errorResponse: SpeechApiErrorResponse;
     }
 > {
-  const contentLength = Number(c.req.header("content-length") ?? "0");
-
-  if (
-    Number.isFinite(contentLength) &&
-    contentLength > MAX_MULTIPART_UPLOAD_BYTES
-  ) {
-    return {
-      success: false,
-      status: 413,
-      errorResponse: createErrorResponse(
-        "Audio upload is too large.",
-        "invalid_audio_upload",
-      ),
-    };
-  }
-
+  // 注：整体请求体的大小上限由 app.ts 中的 bodyLimit 中间件在流层面强制执行，
+  // 不依赖客户端 content-length 头（该头可被省略或伪造）。
   const contentType = c.req.header("content-type") ?? "";
 
   if (!contentType.toLowerCase().includes("multipart/form-data")) {

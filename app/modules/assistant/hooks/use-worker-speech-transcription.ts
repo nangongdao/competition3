@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { withClientAccessToken } from "@/modules/assistant/lib/api-client";
 import { isRecord } from "@/modules/assistant/lib/type-guards";
 import type {
   SpeechApiErrorResponse,
@@ -245,10 +246,13 @@ async function transcribeAudioBlob(input: {
     formData.set("language", input.language.trim());
   }
 
-  const response = await fetch("/api/speech/transcription", {
-    method: "POST",
-    body: formData,
-  });
+  const response = await fetch(
+    "/api/speech/transcription",
+    withClientAccessToken({
+      method: "POST",
+      body: formData,
+    }),
+  );
 
   if (!response.ok) {
     throw new Error(await readTranscriptionError(response));

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  compareFrameSignatures,
   createFrameSignatureFromImageData,
   frameDifferenceRatio,
+  FRAME_DIFF_MIN_CHANGED_CELLS,
   FRAME_DIFF_SEND_THRESHOLD,
   shouldSendFrame,
   type FrameImageData,
@@ -122,5 +124,59 @@ describe("shouldSendFrame", () => {
     const next = buildSignature([0.8, 0.7, 0.9]);
 
     expect(shouldSendFrame(previous, next, FRAME_DIFF_SEND_THRESHOLD)).toBe(true);
+  });
+});
+
+describe("compareFrameSignatures — 三层判定", () => {
+  it("sends when a few grid cells change sharply (局部小物体检出)", () => {
+    const previous = buildSignature([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+    // 4 格亮度剧变（0.5 → 0.9），其余不变
+    const next = buildSignature([0.9, 0.9, 0.5, 0.9, 0.9, 0.5, 0.5, 0.5, 0.5]);
+
+    const result = compareFrameSignatures(previous, next);
+
+    expect(result.shouldSend).toBe(true);
+    expect(result.reason).toBe("local-change");
+    expect(result.changedCells).toBeGreaterThanOrEqual(FRAME_DIFF_MIN_CHANGED_CELLS);
+  });
+
+  it("does not send for a global uniform brightness shift (光照不误触发)", () => {
+    const previous = buildSignature([0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.5, 0.5, 0.5]);
+    const next = buildSignature([0.38, 0.48, 0.58, 0.68, 0.78, 0.88, 0.58, 0.58, 0.58]);
+
+    const result = compareFrameSignatures(previous, next);
+
+    expect(result.shouldSend).toBe(false);
+    expect(result.reason).toBe("illumination-only");
+  });
+
+  it("sends for a broad moderate change without a local hotspot (全局场景切换)", () => {
+    const previous = buildSignature([0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]);
+    const next = buildSignature([0.5, 0.5, 0.5, 0.5, 0.5, 0.6, 0.6, 0.6, 0.2]);
+
+    const result = compareFrameSignatures(previous, next);
+
+    expect(result.shouldSend).toBe(true);
+    expect(result.reason).toBe("global-change");
+  });
+
+  it("skips when nothing changed (静态场景)", () => {
+    const previous = buildSignature([0.4, 0.5, 0.6, 0.4, 0.5, 0.6, 0.4, 0.5, 0.6]);
+    const next = buildSignature([0.4, 0.5, 0.6, 0.4, 0.5, 0.6, 0.4, 0.5, 0.6]);
+
+    const result = compareFrameSignatures(previous, next);
+
+    expect(result.shouldSend).toBe(false);
+    expect(result.reason).toBe("static");
+  });
+
+  it("treats incompatible signatures as a full scene change", () => {
+    const previous = buildSignature([0.1, 0.2], 2, 1);
+    const next = buildSignature([0.1, 0.2], 1, 2);
+
+    const result = compareFrameSignatures(previous, next);
+
+    expect(result.shouldSend).toBe(true);
+    expect(result.reason).toBe("global-change");
   });
 });

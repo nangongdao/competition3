@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 
+import { withClientAccessToken } from "@/modules/assistant/lib/api-client";
 import { isRecord } from "@/modules/assistant/lib/type-guards";
 import type {
   ChatApiErrorResponse,
@@ -146,13 +147,16 @@ export function useChatCompletion(): UseChatCompletionResult {
           requestBody.instructions = input.instructions;
         }
 
-        const response = await fetch("/api/chat/completion", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        });
+        const response = await fetch(
+          "/api/chat/completion",
+          withClientAccessToken({
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+          }),
+        );
 
         if (!response.ok) {
           throw new Error(await readChatError(response));

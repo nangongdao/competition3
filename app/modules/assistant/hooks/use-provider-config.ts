@@ -4,20 +4,27 @@ import { isRecord } from "@/modules/assistant/lib/type-guards";
 import type {
   ProviderConfigResponse,
   ProviderMode,
+  VisionCapability,
 } from "../../../../src/worker/routes/provider/types";
 
 type ProviderConfigState = {
   providerMode: ProviderMode;
+  visionCapability: VisionCapability;
   isLoading: boolean;
   errorMessage?: string;
 };
 
 type UseProviderConfigResult = {
   providerMode: ProviderMode;
+  visionCapability: VisionCapability;
   isProviderConfigLoading: boolean;
   providerConfigError?: string;
   setProviderMode: (providerMode: ProviderMode) => void;
 };
+
+function isVisionCapability(value: unknown): value is VisionCapability {
+  return value === "none" || value === "single-image" || value === "multi-image";
+}
 
 function isProviderConfigResponse(value: unknown): value is ProviderConfigResponse {
   return (
@@ -27,9 +34,12 @@ function isProviderConfigResponse(value: unknown): value is ProviderConfigRespon
   );
 }
 
+const DEFAULT_VISION_CAPABILITY: VisionCapability = "none";
+
 export function useProviderConfig(): UseProviderConfigResult {
   const [state, setState] = useState<ProviderConfigState>({
     providerMode: "chat",
+    visionCapability: DEFAULT_VISION_CAPABILITY,
     isLoading: true,
   });
 
@@ -53,6 +63,9 @@ export function useProviderConfig(): UseProviderConfigResult {
         if (isActive) {
           setState({
             providerMode: value.providerMode,
+            visionCapability: isVisionCapability(value.visionCapability)
+              ? value.visionCapability
+              : DEFAULT_VISION_CAPABILITY,
             isLoading: false,
           });
         }
@@ -88,6 +101,7 @@ export function useProviderConfig(): UseProviderConfigResult {
 
   return {
     providerMode: state.providerMode,
+    visionCapability: state.visionCapability,
     isProviderConfigLoading: state.isLoading,
     providerConfigError: state.errorMessage,
     setProviderMode,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { withClientAccessToken } from "@/modules/assistant/lib/api-client";
 import {
   appendUsageTurn,
   createEmptyUsageReport,
@@ -283,13 +284,16 @@ async function createRealtimeSession(
     requestBody.instructions = input.instructions;
   }
 
-  const response = await fetch("/api/realtime/session", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const response = await fetch(
+    "/api/realtime/session",
+    withClientAccessToken({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    }),
+  );
 
   if (!response.ok) {
     throw new Error(await readSessionError(response));

@@ -55,6 +55,7 @@ import {
   shouldSendFrame,
   type FrameSignature,
 } from "@/modules/assistant/lib/frame-diff";
+import { sampleFrameOffThread } from "@/modules/assistant/lib/frame-processing";
 import type {
   AssistantPhase,
   CostControlSetting,
@@ -291,6 +292,7 @@ export function AssistantWorkspace(): React.JSX.Element {
   const { mediaState, requestAccess, stopAccess, stream } = useMediaCapture();
   const {
     providerMode,
+    visionCapability,
     isProviderConfigLoading,
     providerConfigError,
     setProviderMode,
@@ -688,6 +690,42 @@ export function AssistantWorkspace(): React.JSX.Element {
       };
     },
     [addTranscript, hasMedia],
+  );
+
+  const captureFrameAsync = useCallback(
+    async (source: "manual" | "auto"): Promise<CapturedFrame | null> => {
+      const videoElement = videoRef.current;
+
+      if (
+        !hasMedia ||
+        videoElement === null ||
+        videoElement.videoWidth === 0 ||
+        videoElement.videoHeight === 0
+      ) {
+        return captureFrame(source);
+      }
+
+      // Worker 线程处理：避免 getImageData/toDataURL 阻塞主线程渲染
+      const offThreadResult = await sampleFrameOffThread(videoElement);
+
+      if (offThreadResult !== null) {
+        setLastFrameDataUrl(offThreadResult.dataUrl);
+        setSampledFrameCount((currentCount) => currentCount + 1);
+
+        if (source === "manual") {
+          addTranscript("system", "已采样当前画面。");
+        }
+
+        return {
+          frameDataUrl: offThreadResult.dataUrl,
+          signature: offThreadResult.signature,
+        };
+      }
+
+      // 浏览器不支持 Worker 处理时回退到同步路径
+      return captureFrame(source);
+    },
+    [addTranscript, captureFrame, hasMedia],
   );
 
   const recordUploadedFrame = useCallback((signature: FrameSignature): void => {
@@ -1163,40 +1201,42 @@ export function AssistantWorkspace(): React.JSX.Element {
     }
 
     const timerId = window.setInterval(() => {
-      const capturedFrame = captureFrame("auto");
+      void (async (): Promise<void> => {
+        const capturedFrame = await captureFrameAsync("auto");
 
-      if (capturedFrame === null) {
-        return;
-      }
+        if (capturedFrame === null) {
+          return;
+        }
 
-      if (
-        !shouldSendFrame(
-          lastUploadedFrameSignatureRef.current,
-          capturedFrame.signature,
-          FRAME_DIFF_SEND_THRESHOLD,
-        )
-      ) {
-        setSkippedAutoFrameCount((currentCount) => currentCount + 1);
-        return;
-      }
+        if (
+          !shouldSendFrame(
+            lastUploadedFrameSignatureRef.current,
+            capturedFrame.signature,
+            FRAME_DIFF_SEND_THRESHOLD,
+          )
+        ) {
+          setSkippedAutoFrameCount((currentCount) => currentCount + 1);
+          return;
+        }
 
-      const sent = sendVisualContext({
-        frameDataUrl: capturedFrame.frameDataUrl,
-        prompt:
-          "这是摄像头的最新画面，请作为后续对话的视觉上下文，不需要主动回应。",
-        requestResponse: false,
-      });
+        const sent = sendVisualContext({
+          frameDataUrl: capturedFrame.frameDataUrl,
+          prompt:
+            "这是摄像头的最新画面，请作为后续对话的视觉上下文，不需要主动回应。",
+          requestResponse: false,
+        });
 
-      if (sent) {
-        recordUploadedFrame(capturedFrame.signature);
-      }
+        if (sent) {
+          recordUploadedFrame(capturedFrame.signature);
+        }
+      })();
     }, samplingIntervalSeconds * 1000);
 
     return () => {
       window.clearInterval(timerId);
     };
   }, [
-    captureFrame,
+    captureFrameAsync,
     hasActiveSession,
     hasMedia,
     hasRealtimeConnection,
@@ -1283,7 +1323,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     });
   };
 
-  const handleRealtimeTurn = (): void => {
+  const handleRealtimeTurn = async (): Promise<void> => {
     const prompt = "请描述你现在看到的画面。";
 
     if (isChatMode) {
@@ -1292,7 +1332,7 @@ export function AssistantWorkspace(): React.JSX.Element {
         return;
       }
 
-      const capturedFrame = captureFrame("manual");
+      const capturedFrame = await captureFrameAsync("manual");
 
       if (capturedFrame === null) {
         return;
@@ -1312,7 +1352,7 @@ export function AssistantWorkspace(): React.JSX.Element {
       return;
     }
 
-    const capturedFrame = captureFrame("manual");
+    const capturedFrame = await captureFrameAsync("manual");
 
     if (capturedFrame === null) {
       return;
@@ -1336,8 +1376,8 @@ export function AssistantWorkspace(): React.JSX.Element {
     addTranscript("system", "Realtime 通道未就绪，画面发送失败。");
   };
 
-  const handleManualFrameCapture = (): void => {
-    const capturedFrame = captureFrame("manual");
+  const handleManualFrameCapture = async (): Promise<void> => {
+    const capturedFrame = await captureFrameAsync("manual");
 
     if (capturedFrame !== null && hasRealtimeConnection) {
       const sent = sendVisualContext({
@@ -1796,6 +1836,13 @@ export function AssistantWorkspace(): React.JSX.Element {
         {visibleError ? (
           <p className="error-banner" role="alert">
             {visibleError}
+          </p>
+        ) : null}
+
+        {isChatMode && visionCapability === "none" && !isProviderConfigLoading ? (
+          <p className="vision-hint-banner" role="note">
+            当前 Chat 模型不支持视觉输入，画面理解能力未开启。
+            切换到支持视觉的模型（如 Qwen2.5-VL）即可让它"看懂"摄像头画面。
           </p>
         ) : null}
 

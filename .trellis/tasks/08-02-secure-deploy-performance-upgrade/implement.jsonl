@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/security.md", "reason": "SEC-01/SEC-02/SEC-03/SEC-05 的后端安全规范基线"}
+{"file": ".trellis/spec/backend/api-patterns.md", "reason": "路由/中间件/错误响应的既有模式"}
+{"file": ".trellis/spec/backend/error-logging.md", "reason": "上游错误脱敏与日志记录规范"}
+{"file": ".trellis/spec/shared/dependency-versions.md", "reason": "SEC-04 依赖升级版本约束"}
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "工程质量与 CI 门禁要求"}
+{"file": ".trellis/spec/frontend/hooks.md", "reason": "前端 hooks/纯函数抽取规范（性能改造）"}

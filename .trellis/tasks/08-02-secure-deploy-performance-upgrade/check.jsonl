@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/security.md", "reason": "验收安全项时对照的规范基线"}
+{"file": ".trellis/spec/backend/quality.md", "reason": "后端质量门禁与测试规范"}
+{"file": ".trellis/spec/frontend/quality.md", "reason": "前端性能改造的质量验收"}
+{"file": ".trellis/spec/shared/pr-workflow.md", "reason": "PR 交付流程要求"}

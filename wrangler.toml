@@ -9,14 +9,19 @@ assets = { directory = "./dist", binding = "ASSETS", not_found_handling = "singl
 name = "UPSTREAM_CIRCUIT_BREAKER"
 class_name = "UpstreamCircuitBreaker"
 
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RateLimiter"
+
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["UpstreamCircuitBreaker"]
+new_sqlite_classes = ["UpstreamCircuitBreaker", "RateLimiter"]
 
 [observability]
 enabled = true
 head_sampling_rate = 1
 
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
 OPENAI_PROVIDER_MODE = "chat"
+ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"

@@ -1,4 +1,20 @@
+packages:
+  - "."
+
 allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+
+# 强制将传递依赖升到已修补版本（SEC-04）。
+# eslint 工具链经 minimatch 引入两个 brace-expansion 版本线，分别打补丁：
+#   - minimatch@3.x（eslint core）→ brace-expansion 1.x 线
+#   - minimatch@10.x（typescript-estree）→ brace-expansion 5.x 线
+# postcss 经 vite/@vitest 引入（仅开发）。
+# sharp 经 miniflare（vitest worker pool）引入（仅开发）。
+overrides:
+  brace-expansion@>=3.0.0: 5.0.8
+  brace-expansion@>=1.0.0 <1.1.17: 1.1.17
+  js-yaml: 4.3.0
+  postcss: 8.5.18
+  sharp: 0.35.0
