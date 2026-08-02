@@ -22,7 +22,12 @@ export type SpeechApiErrorCode =
   | "invalid_transcription_provider_config"
   | "invalid_audio_upload"
   | "transcription_failed"
-  | "invalid_transcription_response";
+  | "invalid_transcription_response"
+  | "request_cancelled"
+  | "transcription_circuit_open"
+  | "transcription_rate_limited"
+  | "transcription_timeout"
+  | "transcription_unavailable";
 
 export type SpeechApiErrorResponse = {
   success: false;

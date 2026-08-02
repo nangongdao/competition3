@@ -1,0 +1,12 @@
+{"file":".trellis/spec/backend/index.md","reason":"Review all mandatory backend rules."}
+{"file":".trellis/spec/backend/api-patterns.md","reason":"Verify route contracts and regression coverage remain compatible."}
+{"file":".trellis/spec/backend/environment.md","reason":"Check binding use and absence of unsafe global request state."}
+{"file":".trellis/spec/backend/error-logging.md","reason":"Check structured logs, request IDs, and safe client errors."}
+{"file":".trellis/spec/backend/quality.md","reason":"Run and assess backend quality gates."}
+{"file":".trellis/spec/backend/security.md","reason":"Ensure secrets and sensitive payloads never enter logs/errors."}
+{"file":".trellis/spec/backend/type-safety.md","reason":"Check new Worker/DO types and response contracts."}
+{"file":".trellis/spec/shared/code-quality.md","reason":"Check strict TypeScript, structured errors, and test quality."}
+{"file":".trellis/spec/shared/dependency-versions.md","reason":"Validate any dependency changes against repository constraints."}
+{"file":".trellis/spec/shared/timestamp.md","reason":"Verify cooldown state uses Unix milliseconds consistently."}
+{"file":".trellis/spec/shared/typescript.md","reason":"Check exported return types and narrowing."}
+{"file":".trellis/tasks/07-13-worker-upstream-resilience/research/circuit-breaker-options.md","reason":"Verify implementation matches the selected breaker and retry design."}

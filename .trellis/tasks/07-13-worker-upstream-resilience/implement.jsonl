@@ -1,0 +1,14 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend rules index and mandatory Worker/Hono conventions."}
+{"file":".trellis/spec/backend/api-module.md","reason":"Shared provider resilience logic must be separated from route orchestration."}
+{"file":".trellis/spec/backend/api-patterns.md","reason":"Existing Chat, Realtime, and transcription endpoint contracts and required tests."}
+{"file":".trellis/spec/backend/environment.md","reason":"Worker binding access, request context, and no global I/O/state constraints."}
+{"file":".trellis/spec/backend/error-logging.md","reason":"Structured request logging and safe error response conventions."}
+{"file":".trellis/spec/backend/hono-framework.md","reason":"Hono middleware, execution context, and error handling patterns."}
+{"file":".trellis/spec/backend/quality.md","reason":"Backend quality gates and review requirements."}
+{"file":".trellis/spec/backend/security.md","reason":"Secret handling and security boundaries for provider requests."}
+{"file":".trellis/spec/backend/type-safety.md","reason":"Strict Zod and TypeScript requirements for new shared contracts."}
+{"file":".trellis/spec/shared/code-quality.md","reason":"No any, no non-null assertions, structured errors, and testing rules."}
+{"file":".trellis/spec/shared/dependency-versions.md","reason":"Version constraints if Workers-runtime test dependencies are added."}
+{"file":".trellis/spec/shared/timestamp.md","reason":"Durable Object cooldown and transition timestamps must use Unix milliseconds."}
+{"file":".trellis/spec/shared/typescript.md","reason":"Explicit exported types and strict narrowing conventions."}
+{"file":".trellis/tasks/07-13-worker-upstream-resilience/research/circuit-breaker-options.md","reason":"Chosen Durable Object breaker design, retry policy, and safe error taxonomy."}

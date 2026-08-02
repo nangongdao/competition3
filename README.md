@@ -133,6 +133,38 @@ curl -X POST http://localhost:8787/api/chat/completion \
   -d "{\"message\":\"hello\",\"responseBudget\":\"brief\"}"
 ```
 
+### Worker upstream resilience
+
+All Worker-to-provider calls use one shared reliability policy:
+
+* Chat Completions times out after 30 seconds, Realtime session creation after
+  15 seconds, and transcription after 45 seconds.
+* A request makes at most two attempts. Only `408`, `429`, `500`, `502`, `503`,
+  `504`, timeouts, and network failures are retried. `Retry-After` and jittered
+  backoff are capped at two seconds.
+* Both attempts reuse one cryptographically generated `Idempotency-Key`.
+  Browser cancellation aborts the active provider request and is not counted
+  as a provider failure.
+* A SQLite-backed Durable Object circuit breaker is sharded by provider origin
+  and operation (`chat`, `realtime`, or `transcription`). It opens after three
+  retry-exhausted transient failures, waits 20 seconds, permits one half-open
+  probe, and uses a 60-second cooldown after a failed probe.
+* Provider response bodies are bounded and never copied into public error
+  responses. Clients receive stable timeout, rate-limit, circuit-open,
+  cancellation, or unavailable codes with localized frontend messages.
+* Every API response carries `X-Request-Id`. Provider attempts, retries,
+  breaker decisions, and failures are emitted as structured JSON logs without
+  keys, prompts, images, audio, or transcripts.
+
+The Durable Object binding, SQLite migration, and Worker observability settings
+are declared in `wrangler.toml`. Deploy with Wrangler so migration tag `v1` is
+applied together with the `UPSTREAM_CIRCUIT_BREAKER` binding. For rollback,
+deploy the previous Worker version while retaining the binding, exported class,
+and migration history; remove Durable Object configuration only in a later
+forward migration after rollback is no longer required. If the binding is
+temporarily unavailable, provider calls fail open and emit a structured error
+instead of taking all API routes offline.
+
 ## Windows Quick Start With Third-Party Chat Completions
 
 This is the recommended mode for most third-party API sites because they
@@ -464,8 +496,16 @@ Development:
 * TypeScript
 * Tailwind CSS
 * Cloudflare Workers types
+* Cloudflare Vitest pool for Workers-runtime and Durable Object integration tests
+* Node.js type definitions for the `nodejs_compat` toolchain
 * Wrangler
 * ESLint
+* Vitest
+
+The upstream resilience implementation uses Cloudflare Workers platform APIs
+and adds no third-party runtime dependency. The Workers Vitest pool is a
+development-only dependency used to verify the real Durable Object binding,
+typed RPC methods, and SQLite-backed circuit state in the Workers runtime.
 
 ## Original Functionality
 

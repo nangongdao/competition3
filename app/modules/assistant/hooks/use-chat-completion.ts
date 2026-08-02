@@ -61,6 +61,25 @@ function getLocalizedApiErrorMessage(errorResponse: ChatApiErrorResponse): strin
     return "Chat Completions 请求内容无效。";
   }
 
+  if (errorResponse.code === "chat_completion_timeout") {
+    return "Chat Completions 服务响应超时，请稍后重试。";
+  }
+
+  if (errorResponse.code === "chat_completion_rate_limited") {
+    return "Chat Completions 服务当前请求过多，请稍后重试。";
+  }
+
+  if (
+    errorResponse.code === "chat_completion_circuit_open" ||
+    errorResponse.code === "chat_completion_unavailable"
+  ) {
+    return "Chat Completions 服务暂时不可用，请稍后重试。";
+  }
+
+  if (errorResponse.code === "request_cancelled") {
+    return "Chat Completions 请求已取消。";
+  }
+
   if (errorResponse.code === "chat_completion_failed") {
     return `Chat Completions 调用失败：${errorResponse.error}`;
   }
