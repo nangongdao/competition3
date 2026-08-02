@@ -885,14 +885,16 @@ Added accessible message copy and Chat retry, privacy-limited Markdown/JSON expo
 
 | Hash | Message |
 |------|---------|
+| `992b75b` | fix: address upgrade review findings |
 | `39e4128` | feat: secure AI endpoints and upgrade frame performance |
 | `e0eb102` | Merge branch 'feat/worker-upstream-resilience' |
 
 ### Testing
 
-- [OK] `pnpm typecheck` / `pnpm lint` / `pnpm test`（21 文件 164 测试 + 2 worker DO 测试）/ `pnpm build` 全绿
+- [OK] `pnpm typecheck` / `pnpm lint` / `pnpm test`（21 文件 166 测试 + 2 worker DO 测试）/ `pnpm build` 全绿
 - [OK] `pnpm audit` 无漏洞
 - [OK] `npx wrangler deploy --dry-run` 退出码 0
+- [OK] 评审修复：CI 类型生成、帧处理超时/监听器清理、自动采样串行化、限流 fail-open、空 luma 防 NaN、恒定时间令牌比较、CSP 允许 https、`/api/*` JSON 404
 
 ### Status
 
