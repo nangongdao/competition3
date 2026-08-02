@@ -83,4 +83,19 @@ describe("rate limit middleware", () => {
 
     expect(getByName).toHaveBeenCalledWith("chat:203.0.113.9");
   });
+
+  it("fails open (passes through) when the limiter DO throws", async () => {
+    const namespace = {
+      getByName: () => ({
+        consume: async (): Promise<never> => {
+          throw new Error("Durable Object unavailable");
+        },
+      }),
+    } as unknown as CloudflareBindings["RATE_LIMITER"];
+    const app = createTestApp();
+
+    const response = await request(app, { RATE_LIMITER: namespace });
+
+    expect(response.status).toBe(200);
+  });
 });

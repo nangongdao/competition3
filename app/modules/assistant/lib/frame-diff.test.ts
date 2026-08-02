@@ -179,4 +179,16 @@ describe("compareFrameSignatures — 三层判定", () => {
     expect(result.shouldSend).toBe(true);
     expect(result.reason).toBe("global-change");
   });
+
+  it("returns static for two empty signatures without NaN", () => {
+    const previous = buildSignature([], 1, 1);
+    const next = buildSignature([], 1, 1);
+
+    const result = compareFrameSignatures(previous, next);
+
+    expect(result.shouldSend).toBe(false);
+    expect(result.reason).toBe("static");
+    expect(Number.isNaN(result.globalDiff)).toBe(false);
+    expect(result.globalDiff).toBe(0);
+  });
 });

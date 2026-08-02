@@ -1200,34 +1200,47 @@ export function AssistantWorkspace(): React.JSX.Element {
       return;
     }
 
+    // 串行化自动采样：避免上一次未完成时下一次采样返回后按错误顺序
+    // 覆盖基线（旧帧晚回会覆盖新帧基线，导致漏发或重复发）
+    let isCaptureInFlight = false;
+
     const timerId = window.setInterval(() => {
+      if (isCaptureInFlight) {
+        return;
+      }
+
+      isCaptureInFlight = true;
       void (async (): Promise<void> => {
-        const capturedFrame = await captureFrameAsync("auto");
+        try {
+          const capturedFrame = await captureFrameAsync("auto");
 
-        if (capturedFrame === null) {
-          return;
-        }
+          if (capturedFrame === null) {
+            return;
+          }
 
-        if (
-          !shouldSendFrame(
-            lastUploadedFrameSignatureRef.current,
-            capturedFrame.signature,
-            FRAME_DIFF_SEND_THRESHOLD,
-          )
-        ) {
-          setSkippedAutoFrameCount((currentCount) => currentCount + 1);
-          return;
-        }
+          if (
+            !shouldSendFrame(
+              lastUploadedFrameSignatureRef.current,
+              capturedFrame.signature,
+              FRAME_DIFF_SEND_THRESHOLD,
+            )
+          ) {
+            setSkippedAutoFrameCount((currentCount) => currentCount + 1);
+            return;
+          }
 
-        const sent = sendVisualContext({
-          frameDataUrl: capturedFrame.frameDataUrl,
-          prompt:
-            "这是摄像头的最新画面，请作为后续对话的视觉上下文，不需要主动回应。",
-          requestResponse: false,
-        });
+          const sent = sendVisualContext({
+            frameDataUrl: capturedFrame.frameDataUrl,
+            prompt:
+              "这是摄像头的最新画面，请作为后续对话的视觉上下文，不需要主动回应。",
+            requestResponse: false,
+          });
 
-        if (sent) {
-          recordUploadedFrame(capturedFrame.signature);
+          if (sent) {
+            recordUploadedFrame(capturedFrame.signature);
+          }
+        } finally {
+          isCaptureInFlight = false;
         }
       })();
     }, samplingIntervalSeconds * 1000);

@@ -23,6 +23,11 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
+      # worker-configuration.d.ts 由 wrangler 生成且不入库，
+      # 必须先执行 wrangler types 才能通过类型检查（prepare 脚本会随之生成，此处显式兜底）
+      - name: 生成 Worker 类型
+        run: npx wrangler types
+
       - name: 类型检查
         run: pnpm typecheck
 

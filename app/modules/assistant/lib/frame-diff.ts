@@ -170,6 +170,15 @@ export function compareFrameSignatures(
     };
   }
 
+  if (current.luma.length === 0) {
+    return {
+      shouldSend: false,
+      globalDiff: 0,
+      changedCells: 0,
+      reason: "static",
+    };
+  }
+
   const diffs = current.luma.map(
     (value, index) => value - (previous.luma[index] ?? 0),
   );

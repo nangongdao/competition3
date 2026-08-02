@@ -4,6 +4,39 @@ import { HTTPException } from "hono/http-exception";
 import type { AppEnv } from "../types";
 
 /**
+ * 以恒定时间比较两个字符串是否相等（防时序侧信道）。
+ *
+ * 对两端做 SHA-256 摘要后逐字节比较；长度不同直接返回 false。
+ * 失败路径（无 WebCrypto）退化为普通字符串比较。
+ */
+async function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  if (typeof crypto === "undefined" || crypto.subtle === undefined) {
+    return a === b;
+  }
+
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  const [digestA, digestB] = await Promise.all([
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(a)),
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(b)),
+  ]);
+
+  const bytesA = new Uint8Array(digestA);
+  const bytesB = new Uint8Array(digestB);
+  let difference = 0;
+
+  for (let index = 0; index < bytesA.length; index += 1) {
+    const byteA = bytesA[index] ?? 0;
+    const byteB = bytesB[index] ?? 0;
+    difference |= byteA ^ byteB;
+  }
+
+  return difference === 0;
+}
+
+/**
  * 访问控制中间件。
  *
  * 双重校验（均仅在配置后启用，保证本地开发开箱即用）：
@@ -41,7 +74,7 @@ export function accessControl(): MiddlewareHandler<AppEnv> {
     if (expectedToken !== undefined && expectedToken.length > 0) {
       const provided = c.req.header("x-client-token");
 
-      if (provided !== expectedToken) {
+      if (provided === undefined || !(await timingSafeEqual(provided, expectedToken))) {
         throw new HTTPException(401, { message: "Missing or invalid client token." });
       }
     }

@@ -30,7 +30,8 @@ app.use(
       styleSrc: ["'self'", "'unsafe-inline'"], // Tailwind 运行时需要
       imgSrc: ["'self'", "data:", "blob:"], // 摄像头帧
       mediaSrc: ["'self'", "blob:"],
-      connectSrc: ["'self'", "wss:"],
+      // Realtime 的 webrtcUrl 与供应商端点可配置，故允许任意 https/wss 连接
+      connectSrc: ["'self'", "https:", "wss:"],
       frameAncestors: ["'none'"],
     },
   }),
@@ -125,6 +126,18 @@ app.onError((error, c) => {
 });
 
 app.notFound((c) => {
+  // 未知 API 路径返回 JSON 404，而不是回退到 SPA index.html，
+  // 避免这些请求以 200+HTML 响应并白耗限流配额
+  if (c.req.path.startsWith("/api/")) {
+    return c.json(
+      {
+        success: false,
+        error: "Not Found",
+      },
+      404,
+    );
+  }
+
   return c.env.ASSETS.fetch(c.req.raw);
 });
 

@@ -33,7 +33,10 @@ type ProcessFailure = {
 self.onmessage = (event: MessageEvent<ProcessRequest>) => {
   const { bitmap, maxWidth, quality } = event.data;
 
-  void processFrame(bitmap, maxWidth, quality);
+  // 整体兜底：任何异常都必须回包，否则主线程会一直等待（由超时兜底）
+  void processFrame(bitmap, maxWidth, quality).catch(() => {
+    postFailure("帧处理失败。");
+  });
 };
 
 async function processFrame(
@@ -60,22 +63,18 @@ async function processFrame(
   const imageData = context.getImageData(0, 0, width, height);
   const signature = createFrameSignatureFromImageData(imageData);
 
-  try {
-    // convertToBlob 是异步的，不阻塞事件循环
-    const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
-    const buffer = await blob.arrayBuffer();
+  // convertToBlob 是异步的，不阻塞事件循环
+  const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
+  const buffer = await blob.arrayBuffer();
 
-    postMessage(
-      {
-        ok: true,
-        signature,
-        buffer,
-      } satisfies ProcessSuccess,
-      [buffer],
-    );
-  } catch {
-    postFailure("无法编码画面。");
-  }
+  postMessage(
+    {
+      ok: true,
+      signature,
+      buffer,
+    } satisfies ProcessSuccess,
+    [buffer],
+  );
 }
 
 function postFailure(error: string): void {
