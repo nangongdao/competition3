@@ -1,1 +1,4 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "文档质量与结构完整性验收基线"}
+{"file": ".trellis/spec/big-question/index.md", "reason": "确认路线图与项目全局 spec 不冲突"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "确认 M1 拆分目标布局符合规范"}
+{"file": ".trellis/spec/backend/database.md", "reason": "确认 D1 持久化方案符合数据库规范"}
