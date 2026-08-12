@@ -2,6 +2,11 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 
+import {
+  executeUpstreamRequest,
+  UpstreamRequestError,
+} from "../../lib/upstream/resilience";
+import { readJsonResponseBounded } from "../../lib/upstream/response";
 import type { AppEnv } from "../../types";
 import {
   realtimeSessionInputSchema,
@@ -16,6 +21,7 @@ const DEFAULT_REALTIME_WEBRTC_PATH = "/realtime";
 const DEFAULT_REALTIME_MODEL = "gpt-realtime";
 const DEFAULT_REALTIME_VOICE = "alloy";
 const MAX_SESSION_SECONDS = 10 * 60;
+const REALTIME_UPSTREAM_TIMEOUT_MS = 15_000;
 const DEFAULT_REALTIME_INSTRUCTIONS =
   "You are a concise visual dialogue assistant. Use camera frames only when the client explicitly supplies sampled visual context.";
 const BRIEF_RESPONSE_INSTRUCTION =
@@ -98,36 +104,53 @@ realtimeRoutes.post("/session", async (c) => {
     sessionPayload.turn_detection = null;
   }
 
-  const upstreamResponse = await fetch(providerConfig.sessionUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(sessionPayload),
-  });
+  let upstreamResponse: Response;
 
-  const upstreamBody = await readUpstreamJson(upstreamResponse);
+  try {
+    upstreamResponse = await executeUpstreamRequest({
+      env: c.env,
+      operation: "realtime",
+      url: providerConfig.sessionUrl,
+      requestId: c.get("requestId"),
+      requestSignal: c.req.raw.signal,
+      policy: {
+        timeoutMs: REALTIME_UPSTREAM_TIMEOUT_MS,
+        maxAttempts: 2,
+      },
+      buildRequestInit: (idempotencyKey): RequestInit => ({
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+          "X-Request-Id": c.get("requestId"),
+        },
+        body: JSON.stringify(sessionPayload),
+      }),
+    });
+  } catch (error: unknown) {
+    return createUpstreamFailureResponse(c, error);
+  }
 
   if (!upstreamResponse.ok) {
     const response: ApiErrorResponse = {
       success: false,
-      error:
-        getUpstreamErrorMessage(upstreamBody) ??
-        `Realtime provider session creation failed with status ${upstreamResponse.status}.`,
+      error: "Realtime provider rejected the session request.",
       code: "openai_session_failed",
     };
 
     return c.json(response, 502);
   }
 
+  const upstreamBody = await readJsonResponseBounded(upstreamResponse);
+
   const response: RealtimeSessionSuccessResponse = {
     success: true,
-    session: upstreamBody,
+    session: upstreamBody.value,
     webrtcUrl: appendQueryParam(
       providerConfig.webrtcUrl,
       "model",
-      getSessionModel(upstreamBody) ?? providerConfig.model,
+      getSessionModel(upstreamBody.value) ?? providerConfig.model,
     ),
     costPolicy: {
       visualContextMode: sessionInput.visualContextMode,
@@ -250,35 +273,54 @@ async function readJsonBody(c: Context<AppEnv>): Promise<unknown> {
   }
 }
 
-async function readUpstreamJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-}
-
-function getUpstreamErrorMessage(value: unknown): string | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
+function createUpstreamFailureResponse(
+  c: Context<AppEnv>,
+  error: unknown,
+): Response {
+  if (!(error instanceof UpstreamRequestError)) {
+    throw error;
   }
 
-  if ("error" in value) {
-    const errorValue = value.error;
-
-    if (
-      typeof errorValue === "object" &&
-      errorValue !== null &&
-      "message" in errorValue &&
-      typeof errorValue.message === "string"
-    ) {
-      return errorValue.message;
-    }
+  if (error.retryAfterSeconds !== undefined) {
+    c.header("Retry-After", String(error.retryAfterSeconds));
   }
 
-  if ("message" in value && typeof value.message === "string") {
-    return value.message;
-  }
+  const errorMap: Record<
+    UpstreamRequestError["kind"],
+    { code: string; message: string; status: 408 | 502 | 503 | 504 }
+  > = {
+    cancelled: {
+      code: "request_cancelled",
+      message: "Realtime session request was cancelled.",
+      status: 408,
+    },
+    "circuit-open": {
+      code: "realtime_circuit_open",
+      message: "Realtime provider is temporarily unavailable.",
+      status: 503,
+    },
+    "rate-limited": {
+      code: "realtime_rate_limited",
+      message: "Realtime provider is temporarily rate limited.",
+      status: 503,
+    },
+    timeout: {
+      code: "realtime_timeout",
+      message: "Realtime provider timed out.",
+      status: 504,
+    },
+    unavailable: {
+      code: "realtime_unavailable",
+      message: "Realtime provider is temporarily unavailable.",
+      status: 502,
+    },
+  };
+  const mappedError = errorMap[error.kind];
+  const response: ApiErrorResponse = {
+    success: false,
+    error: mappedError.message,
+    code: mappedError.code,
+  };
 
-  return undefined;
+  return c.json(response, mappedError.status);
 }

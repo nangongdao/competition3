@@ -385,6 +385,70 @@ export function formatUsd(amount: number): string {
   return `$${amount.toFixed(4)}`;
 }
 
+/** 视觉 token 计算参数（OpenAI 兼容规范）。 */
+const VISION_BASE_TOKENS = 85;
+const VISION_TILE_TOKENS = 170;
+const VISION_TILE_SIZE = 512;
+
+export type ResolutionCost = {
+  width: number;
+  height: number;
+  tokens: number;
+  savingPercent: number;
+};
+
+/**
+ * 估算一张图片消耗的 input token（OpenAI 兼容分块规则）。
+ *
+ * ```
+ * base_tokens = 85
+ * tile_tokens = 170 × ceil(width/512) × ceil(height/512)
+ * ```
+ *
+ * 640×360 → ceil(640/512)=2, ceil(360/512)=1 → 85 + 170×2×1 = 425 token/帧。
+ * 512×288 → 1×1 分块 → 85 + 170 = 255 token/帧（省 40%）。
+ *
+ * @param width 图片宽度（像素）
+ * @param height 图片高度（像素）
+ */
+export function estimateImageTokens(width: number, height: number): number {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return 0;
+  }
+
+  const tilesX = Math.ceil(width / VISION_TILE_SIZE);
+  const tilesY = Math.ceil(height / VISION_TILE_SIZE);
+
+  return VISION_BASE_TOKENS + VISION_TILE_TOKENS * tilesX * tilesY;
+}
+
+/**
+ * 计算不同分辨率下的成本，用于向用户展示降分辨率的收益。
+ */
+export function compareResolutionCosts(
+  sourceWidth: number,
+  sourceHeight: number,
+): readonly ResolutionCost[] {
+  const baseline = estimateImageTokens(sourceWidth, sourceHeight);
+  const candidates = [1280, 1024, 768, 640, 512];
+
+  return candidates
+    .filter((width) => width < sourceWidth)
+    .map((width) => {
+      const scale = width / sourceWidth;
+      const height = Math.round(sourceHeight * scale);
+      const tokens = estimateImageTokens(width, height);
+
+      return {
+        width,
+        height,
+        tokens,
+        savingPercent:
+          baseline === 0 ? 0 : Math.round((1 - tokens / baseline) * 100),
+      };
+    });
+}
+
 export function formatTokens(count: number): string {
   if (count >= 1000) {
     return `${(count / 1000).toFixed(1)}k`;

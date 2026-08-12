@@ -12,6 +12,7 @@ export default tseslint.config(
       "node_modules/",
       ".trellis/",
       ".wrangler/",
+      "worker-configuration.d.ts",
     ],
   },
   js.configs.recommended,
@@ -38,6 +39,9 @@ export default tseslint.config(
       globals: {
         ...globals.serviceworker,
       },
+    },
+    rules: {
+      "no-console": ["error", { allow: ["info", "warn", "error"] }],
     },
   },
   {

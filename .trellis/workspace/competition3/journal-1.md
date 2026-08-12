@@ -785,3 +785,122 @@ Added OPENAI_TRANSCRIPTION_API_KEY for Worker speech transcription with shared-k
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: Adaptive assistant workspace layout
+
+**Date**: 2026-07-15
+**Task**: Adaptive assistant workspace layout
+**Branch**: `feat/adaptive-workspace-layout`
+
+### Summary
+
+Implemented focus modes, collapsible auxiliary panels, desktop panel reorder and resizing, validated local layout persistence, deterministic mobile fallback, and memoized transcript rendering; verified lint, typecheck, 94 tests, and production build; opened PR #26.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e4cba90` | (see git log) |
+| `e6a5eeb` | (see git log) |
+| `f2eeb9e` | (see git log) |
+| `d5ec949` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 25: Conversation productivity and long-history performance
+
+**Date**: 2026-07-15
+**Task**: Conversation productivity and long-history performance
+**Branch**: `feat/conversation-productivity-performance`
+
+### Summary
+
+Added accessible message copy and Chat retry, privacy-limited Markdown/JSON export, confirmed clearing, bounded long-history rendering, stable scroll navigation, responsive UI polish, tests, browser smoke coverage, and frontend executable contracts. PR #27 opened via GitHub API fallback after Git HTTPS transport failures.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `237e988` | (see git log) |
+| `6f35084` | (see git log) |
+| `d394300` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 26: Secure-deploy and performance upgrade (UPGRADE_PLAN + PERFORMANCE_UPGRADE)
+
+**Date**: 2026-08-02
+**Task**: 安全加固与性能升级改造
+**Branch**: `feat/secure-deploy-performance-upgrade`
+
+### Summary
+
+依据仓库内 `UPGRADE_PLAN.md`（安全/工程质量）与 `PERFORMANCE_UPGRADE.md`（性能/能力）完成升级。合并 `feat/worker-upstream-resilience` 分支（熔断器 + 超时 + 重试）恢复可部署性，并新增访问控制/限流/bodyLimit/CSP、错误脱敏、客户端令牌；性能侧升级帧差分三层判定、帧处理移入 Web Worker、视觉能力分级与成本估算。`pnpm audit` 清零，新增 CI 门禁。
+
+### Main Changes
+
+- **DEPLOY-01**：合并 `feat/worker-upstream-resilience`，`wrangler deploy --dry-run` 退出码 0；ARCH-03（上游超时）随分支解决
+- **SEC-01**：`access-control`（Origin 白名单 + 客户端令牌）+ `RateLimiter` DO 滑动窗口限流（chat 20/min、speech 15/min、realtime 3/min）+ 测试
+- **SEC-03**：Hono `bodyLimit`（speech 11MB / chat 9MB / realtime 64KB），删除可绕过的 `content-length` 检查
+- **SEC-02**：上游错误原文不再回传（随 resilience 分支），更新 provider 测试断言
+- **SEC-04**：`react-router` 8.3.0、`hono` 4.12.33、`vitest` 4.1.10、`wrangler` 4.118.0；`pnpm-workspace.yaml` overrides 修复 brace-expansion/js-yaml/postcss/sharp → `pnpm audit` 无漏洞
+- **SEC-05**：`secureHeaders` 补 CSP
+- **QUAL-01**：`.github/workflows/ci.yml`（含 `wrangler deploy --dry-run` 门禁）
+- **性能 P0**：`frame-diff.ts` 三层判定（局部变化 + 光照补偿 + 全局切换，48×27 网格）；帧处理移入 `frame-processor.worker.ts`（OffscreenCanvas），主线程仅 `createImageBitmap`
+- **性能 P1**：`vision-capability.ts` 视觉能力分级 + provider 配置接口返回 + 前端提示横幅；`cost-model.ts` 新增 `estimateImageTokens`/`compareResolutionCosts`
+- 前端：`api-client.ts` 统一附加 `X-Client-Token`；`.env.example` 文档
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `992b75b` | fix: address upgrade review findings |
+| `39e4128` | feat: secure AI endpoints and upgrade frame performance |
+| `e0eb102` | Merge branch 'feat/worker-upstream-resilience' |
+
+### Testing
+
+- [OK] `pnpm typecheck` / `pnpm lint` / `pnpm test`（21 文件 166 测试 + 2 worker DO 测试）/ `pnpm build` 全绿
+- [OK] `pnpm audit` 无漏洞
+- [OK] `npx wrangler deploy --dry-run` 退出码 0
+- [OK] 评审修复：CI 类型生成、帧处理超时/监听器清理、自动采样串行化、限流 fail-open、空 luma 防 NaN、恒定时间令牌比较、CSP 允许 https、`/api/*` JSON 404
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 上游供应商控制台设置月度消费硬上限（人工操作）
+- 阶段二（ARCH-01 完整拆分 / ARCH-02 统一会话编排）与 P2 能力进阶（场景记忆、空间定位、虚拟化）留待后续任务

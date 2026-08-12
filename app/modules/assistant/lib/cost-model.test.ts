@@ -4,9 +4,11 @@ import {
   accumulateUsage,
   appendUsageTurn,
   buildUsageReportExport,
+  compareResolutionCosts,
   createEmptyUsage,
   createEmptyUsageReport,
   estimateCostUsd,
+  estimateImageTokens,
   formatTokens,
   formatUsd,
   parseResponseUsage,
@@ -343,5 +345,40 @@ describe("usage report export", () => {
         "",
       ].join("\n"),
     );
+  });
+});
+
+describe("视觉 token 成本估算", () => {
+  it("estimates 425 tokens for a 640x360 frame (2x1 tiles)", () => {
+    expect(estimateImageTokens(640, 360)).toBe(425);
+  });
+
+  it("estimates 255 tokens for a 512x288 frame (1x1 tile)", () => {
+    expect(estimateImageTokens(512, 288)).toBe(255);
+  });
+
+  it("estimates 255 tokens for a small image that fits one tile", () => {
+    expect(estimateImageTokens(200, 200)).toBe(255);
+  });
+
+  it("returns zero for invalid dimensions", () => {
+    expect(estimateImageTokens(0, 360)).toBe(0);
+    expect(estimateImageTokens(640, -1)).toBe(0);
+  });
+
+  it("reports a 40% saving from 640 down to 512", () => {
+    const results = compareResolutionCosts(640, 360);
+    const entry = results.find((item) => item.width === 512);
+
+    expect(entry).toBeDefined();
+    expect(entry?.tokens).toBe(255);
+    expect(entry?.savingPercent).toBe(40);
+  });
+
+  it("only lists resolutions smaller than the source", () => {
+    const results = compareResolutionCosts(1024, 768);
+
+    expect(results.some((item) => item.width >= 1024)).toBe(false);
+    expect(results[0]?.width).toBe(768);
   });
 });

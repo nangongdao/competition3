@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import app from "../../index";
+import app from "../../app";
+import { createOpenCircuitNamespace } from "../../test-utils/open-circuit";
 import type {
   ApiErrorResponse,
   RealtimeSessionSuccessResponse,
@@ -83,6 +84,30 @@ describe("realtime session route", () => {
     expect(response.status).toBe(400);
     expect(body.success).toBe(false);
     expect(body.code).toBe("invalid_request");
+  });
+
+  it("fails fast with a stable error when the realtime circuit is open", async () => {
+    const fetchMock = vi.fn((): Promise<Response> => Promise.resolve(Response.json({})));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/realtime/session",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visualContextMode: "manual" }),
+      },
+      createEnv({
+        OPENAI_API_KEY: "sk-test",
+        UPSTREAM_CIRCUIT_BREAKER: createOpenCircuitNamespace(),
+      }),
+    );
+    const body = await readJson<ApiErrorResponse>(response);
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("3");
+    expect(body.code).toBe("realtime_circuit_open");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("returns 400 for invalid turn detection mode", async () => {
@@ -190,7 +215,8 @@ describe("realtime session route", () => {
     expect(response.status).toBe(502);
     expect(body.success).toBe(false);
     expect(body.code).toBe("openai_session_failed");
-    expect(body.error).toBe("upstream rejected request");
+    expect(body.error).toBe("Realtime provider rejected the session request.");
+    expect(body.error).not.toContain("upstream rejected request");
   });
 
   it("returns short-lived session data with cost policy", async () => {

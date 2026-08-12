@@ -24,7 +24,11 @@ boundary in place:
 * Server VAD and push-to-talk turn modes, plus a live microphone mute toggle
 * Manual and low-frequency visual frame sampling controls
 * Frame-difference gating for automatic sampling, with visible sent/skipped
-  counters to show static-scene upload savings
+  counters to show static-scene upload savings. The diff uses a three-layer
+  judgment (local cell change, illumination-tolerant global change, static) that
+  catches small-object changes without false-triggering on lighting shifts
+* Off-main-thread frame processing (Web Worker + OffscreenCanvas) so pixel
+  readback and JPEG encoding no longer block the UI thread during sampling
 * Sampled frame delivery through the Realtime data channel
 * Text message composer for typed questions during a Realtime session
 * Worker-backed short voice transcription for Chat Completions mode, with
@@ -132,6 +136,70 @@ curl -X POST http://localhost:8787/api/chat/completion \
   -H "Content-Type: application/json" \
   -d "{\"message\":\"hello\",\"responseBudget\":\"brief\"}"
 ```
+
+### Worker upstream resilience
+
+All Worker-to-provider calls use one shared reliability policy:
+
+* Chat Completions times out after 30 seconds, Realtime session creation after
+  15 seconds, and transcription after 45 seconds.
+* A request makes at most two attempts. Only `408`, `429`, `500`, `502`, `503`,
+  `504`, timeouts, and network failures are retried. `Retry-After` and jittered
+  backoff are capped at two seconds.
+* Both attempts reuse one cryptographically generated `Idempotency-Key`.
+  Browser cancellation aborts the active provider request and is not counted
+  as a provider failure.
+* A SQLite-backed Durable Object circuit breaker is sharded by provider origin
+  and operation (`chat`, `realtime`, or `transcription`). It opens after three
+  retry-exhausted transient failures, waits 20 seconds, permits one half-open
+  probe, and uses a 60-second cooldown after a failed probe.
+* Provider response bodies are bounded and never copied into public error
+  responses. Clients receive stable timeout, rate-limit, circuit-open,
+  cancellation, or unavailable codes with localized frontend messages.
+* Every API response carries `X-Request-Id`. Provider attempts, retries,
+  breaker decisions, and failures are emitted as structured JSON logs without
+  keys, prompts, images, audio, or transcripts.
+
+The Durable Object binding, SQLite migration, and Worker observability settings
+are declared in `wrangler.toml`. Deploy with Wrangler so migration tag `v1` is
+applied together with the `UPSTREAM_CIRCUIT_BREAKER` binding. For rollback,
+deploy the previous Worker version while retaining the binding, exported class,
+and migration history; remove Durable Object configuration only in a later
+forward migration after rollback is no longer required. If the binding is
+temporarily unavailable, provider calls fail open and emit a structured error
+instead of taking all API routes offline.
+
+### Worker access control and rate limiting
+
+AI endpoints (`/api/chat/*`, `/api/speech/*`, `/api/realtime/*`) are guarded by
+two cost-protection layers. Both are opt-in so local development works with no
+configuration:
+
+* **Client token**: set `CLIENT_ACCESS_TOKEN` as a Worker secret
+  (`npx wrangler secret put CLIENT_ACCESS_TOKEN`). Requests to cost-bearing
+  endpoints must then carry the matching `X-Client-Token` header or they receive
+  `401`. The frontend sends it automatically when the build-time
+  `VITE_CLIENT_ACCESS_TOKEN` variable is set (see `.env.example`); the value must
+  match the Worker secret. This is not real user authentication — the token is
+  visible in the frontend bundle — but it blocks casual scans and copy-paste
+  scripts from draining the provider quota.
+* **Origin allowlist**: set `ALLOWED_ORIGINS` (comma-separated) in `[vars]`.
+  Requests from an `Origin` that is neither listed nor same-origin receive
+  `403`. Same-origin requests (the deployed app served by the Worker) always
+  pass, so no domain-specific configuration is required for normal use.
+* **Sliding-window rate limiting**: a SQLite-migrated `RateLimiter` Durable
+  Object limits each IP per endpoint to 20/min (chat), 15/min (speech), or
+  3/min (realtime, the most expensive). Over-limit requests receive `429` with
+  a `Retry-After` header. If the binding is absent (unit tests), the middleware
+  fails open.
+
+Request bodies are also bounded at the stream level (`bodyLimit`): speech
+uploads up to 11 MB, chat up to 9 MB, and realtime sessions up to 64 KB — the
+limit cannot be bypassed by omitting or faking `content-length`. Health and
+provider-config endpoints stay public because they cost nothing.
+
+A `Content-Security-Policy` is applied to Worker responses (script/style from
+`'self'`, media and image `blob:` for camera frames).
 
 ## Windows Quick Start With Third-Party Chat Completions
 
@@ -260,12 +328,20 @@ corepack pnpm build
 
 Do not commit secrets. Use `.dev.vars` for local Worker runtime secrets.
 
+Client token for the frontend (see `.env.example`):
+
+```bash
+VITE_CLIENT_ACCESS_TOKEN=           # build-time; must match the CLIENT_ACCESS_TOKEN secret
+```
+
 Worker runtime variables:
 
 ```bash
 OPENAI_API_KEY=sk-...
 ENVIRONMENT=development
 OPENAI_PROVIDER_MODE=chat
+CLIENT_ACCESS_TOKEN=                # Worker secret: npx wrangler secret put CLIENT_ACCESS_TOKEN
+ALLOWED_ORIGINS=http://localhost:5173
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_CHAT_BASE_URL=
 OPENAI_CHAT_COMPLETIONS_PATH=/chat/completions
@@ -352,6 +428,18 @@ Parameter meanings:
   session. Default: `gpt-realtime`.
 * `OPENAI_REALTIME_VOICE`: Provider voice ID used for audio output when the
   provider supports voice selection. Default: `alloy`.
+* `CLIENT_ACCESS_TOKEN`: Optional Worker secret guarding cost-bearing AI
+  endpoints. When set, requests to `/api/chat/*`, `/api/speech/*`, and
+  `/api/realtime/*` must carry a matching `X-Client-Token` header. The frontend
+  sends it from `VITE_CLIENT_ACCESS_TOKEN`; keep both values in sync.
+* `ALLOWED_ORIGINS`: Optional comma-separated Origin allowlist. Requests from
+  unlisted, cross-origin `Origin` headers receive `403`. Same-origin requests
+  always pass. Include the local dev origin (`http://localhost:5173`) for
+  local-to-Worker development.
+
+The frontend shows a hint banner when the configured Chat model has no vision
+capability (`OPENAI_CHAT_MODEL` unknown or `OPENAI_CHAT_VISION_INPUT=disabled`),
+so it is obvious when and how to switch to a vision-capable model.
 
 Frontend variables must use the `VITE_` prefix and must not contain secrets.
 
@@ -464,8 +552,16 @@ Development:
 * TypeScript
 * Tailwind CSS
 * Cloudflare Workers types
+* Cloudflare Vitest pool for Workers-runtime and Durable Object integration tests
+* Node.js type definitions for the `nodejs_compat` toolchain
 * Wrangler
 * ESLint
+* Vitest
+
+The upstream resilience implementation uses Cloudflare Workers platform APIs
+and adds no third-party runtime dependency. The Workers Vitest pool is a
+development-only dependency used to verify the real Durable Object binding,
+typed RPC methods, and SQLite-backed circuit state in the Workers runtime.
 
 ## Original Functionality
 

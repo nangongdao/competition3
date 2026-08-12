@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { withClientAccessToken } from "@/modules/assistant/lib/api-client";
 import { isRecord } from "@/modules/assistant/lib/type-guards";
 import type {
   SpeechApiErrorResponse,
@@ -152,6 +153,25 @@ export function getLocalizedSpeechApiErrorMessage(
     return "录音上传内容无效，请重新录制一段语音。";
   }
 
+  if (errorResponse.code === "transcription_timeout") {
+    return "语音转文字服务响应超时，请稍后重试。";
+  }
+
+  if (errorResponse.code === "transcription_rate_limited") {
+    return "语音转文字服务当前请求过多，请稍后重试。";
+  }
+
+  if (
+    errorResponse.code === "transcription_circuit_open" ||
+    errorResponse.code === "transcription_unavailable"
+  ) {
+    return "语音转文字服务暂时不可用，请稍后重试。";
+  }
+
+  if (errorResponse.code === "request_cancelled") {
+    return "语音转文字请求已取消。";
+  }
+
   if (errorResponse.code === "transcription_failed") {
     return `语音转文字调用失败：${errorResponse.error}`;
   }
@@ -226,10 +246,13 @@ async function transcribeAudioBlob(input: {
     formData.set("language", input.language.trim());
   }
 
-  const response = await fetch("/api/speech/transcription", {
-    method: "POST",
-    body: formData,
-  });
+  const response = await fetch(
+    "/api/speech/transcription",
+    withClientAccessToken({
+      method: "POST",
+      body: formData,
+    }),
+  );
 
   if (!response.ok) {
     throw new Error(await readTranscriptionError(response));

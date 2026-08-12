@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.6.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # worker-configuration.d.ts 由 wrangler 生成且不入库，
+      # 必须先执行 wrangler types 才能通过类型检查（prepare 脚本会随之生成，此处显式兜底）
+      - name: 生成 Worker 类型
+        run: npx wrangler types
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      - name: 代码风格
+        run: pnpm lint
+
+      - name: 单元测试
+        run: pnpm test
+
+      - name: 生产构建
+        run: pnpm build
+
+      - name: 部署配置校验（防止 DO 绑定缺失）
+        run: npx wrangler deploy --dry-run --outdir=/tmp/wrangler-dry

@@ -1,0 +1,12 @@
+{"file": ".trellis/spec/big-question/index.md", "reason": "项目全局 spec 索引与系统总览，路线图里程碑划分需对齐"}
+{"file": ".trellis/spec/big-question/system-constraints.md", "reason": "Workers/单 isolate 128MB/DO 等平台约束，决定 D1 持久化与流式输出的可行边界"}
+{"file": ".trellis/spec/big-question/cross-layer-contract.md", "reason": "前后端跨层契约，会话持久化与 SSE 流式需遵循"}
+{"file": ".trellis/spec/frontend/components.md", "reason": "前端组件规范，巨型组件拆分（M1）的依据"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "前端目录结构规范，拆分后的目标布局"}
+{"file": ".trellis/spec/frontend/workspace-layout.md", "reason": "工作区布局规范，UI 升级（M2）需对齐"}
+{"file": ".trellis/spec/frontend/conversation-productivity.md", "reason": "会话生产力规范，多会话管理与转写虚拟化的依据"}
+{"file": ".trellis/spec/frontend/authentication.md", "reason": "鉴权 spec，确认用户体系 Out of Scope 的边界"}
+{"file": ".trellis/spec/backend/api-module.md", "reason": "后端 API 模块规范，SSE 流式路由设计依据"}
+{"file": ".trellis/spec/backend/database.md", "reason": "数据库规范，D1 会话持久化的依据"}
+{"file": ".trellis/spec/backend/upstream-resilience.md", "reason": "上游韧性规范（已实现），路线图标注已完成项的基准"}
+{"file": ".trellis/spec/shared/code-quality.md", "reason": "代码质量标准，工程化收尾（M5）与验收基线"}

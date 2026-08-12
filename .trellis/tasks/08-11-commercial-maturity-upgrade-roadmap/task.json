@@ -1,0 +1,33 @@
+{
+  "id": "commercial-maturity-upgrade-roadmap",
+  "name": "commercial-maturity-upgrade-roadmap",
+  "title": "Commercial maturity upgrade roadmap",
+  "description": "",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "competition3",
+  "assignee": "competition3",
+  "createdAt": "2026-08-11",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "feat/secure-deploy-performance-upgrade",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-11-m1-extract-pure-utils",
+    "08-11-m1-continuous-chat-vad-hook",
+    "08-11-m1-assistant-reducer",
+    "08-11-m1-split-assistant-workspace",
+    "08-11-m1-split-realtime-session-hook",
+    "08-11-m1-unified-assistant-session"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

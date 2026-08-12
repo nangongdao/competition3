@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import app from "../../index";
+import app from "../../app";
+import { createOpenCircuitNamespace } from "../../test-utils/open-circuit";
 import type { CloudflareBindings } from "../../types";
 import type { ChatApiErrorResponse, ChatCompletionSuccessResponse } from "./types";
 
@@ -80,6 +81,61 @@ describe("chat completion route", () => {
     expect(response.status).toBe(503);
     expect(body.success).toBe(false);
     expect(body.code).toBe("missing_chat_model");
+  });
+
+  it("fails fast with a stable error when the chat circuit is open", async () => {
+    const fetchMock = vi.fn((): Promise<Response> => Promise.resolve(Response.json({})));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/chat/completion",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "hello" }),
+      },
+      createEnv({
+        OPENAI_API_KEY: "sk-test",
+        OPENAI_CHAT_MODEL: "vision-chat-model",
+        UPSTREAM_CIRCUIT_BREAKER: createOpenCircuitNamespace(),
+      }),
+    );
+    const body = await readJson<ChatApiErrorResponse>(response);
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("3");
+    expect(body.code).toBe("chat_completion_circuit_open");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("maps retry-exhausted provider rate limits to a stable error", async () => {
+    const fetchMock = vi.fn((): Promise<Response> =>
+      Promise.resolve(new Response("provider quota details", {
+        status: 429,
+        headers: { "Retry-After": "0" },
+      })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.request(
+      "/api/chat/completion",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "hello" }),
+      },
+      createEnv({
+        OPENAI_API_KEY: "sk-test",
+        OPENAI_CHAT_MODEL: "vision-chat-model",
+      }),
+    );
+    const body = await readJson<ChatApiErrorResponse>(response);
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("1");
+    expect(body.code).toBe("chat_completion_rate_limited");
+    expect(body.error).not.toContain("quota details");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("returns 503 for invalid chat provider configuration", async () => {
@@ -169,7 +225,7 @@ describe("chat completion route", () => {
     expect(response.status).toBe(502);
     expect(body.success).toBe(false);
     expect(body.code).toBe("chat_completion_failed");
-    expect(body.error).toBe("model not found");
+    expect(body.error).toBe("Chat Completions provider rejected the request.");
   });
 
   it("calls the configured Chat Completions endpoint with text and image content", async () => {
@@ -457,7 +513,7 @@ describe("chat completion route", () => {
     });
   });
 
-  it("includes non-JSON upstream error text in provider failures", async () => {
+  it("does not expose non-JSON upstream error text", async () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         void input;
@@ -491,6 +547,7 @@ describe("chat completion route", () => {
 
     expect(response.status).toBe(502);
     expect(body.code).toBe("chat_completion_failed");
-    expect(body.error).toBe("Provider returned bad request: unsupported max_tokens");
+    expect(body.error).toBe("Chat Completions provider rejected the request.");
+    expect(body.error).not.toContain("unsupported max_tokens");
   });
 });

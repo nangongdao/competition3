@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { withClientAccessToken } from "@/modules/assistant/lib/api-client";
 import {
   appendUsageTurn,
   createEmptyUsageReport,
@@ -230,6 +231,25 @@ function getLocalizedApiErrorMessage(errorResponse: ApiErrorResponse): string {
     return "Realtime 会话请求参数无效。";
   }
 
+  if (errorResponse.code === "realtime_timeout") {
+    return "Realtime 服务响应超时，请稍后重试。";
+  }
+
+  if (errorResponse.code === "realtime_rate_limited") {
+    return "Realtime 服务当前请求过多，请稍后重试。";
+  }
+
+  if (
+    errorResponse.code === "realtime_circuit_open" ||
+    errorResponse.code === "realtime_unavailable"
+  ) {
+    return "Realtime 服务暂时不可用，请稍后重试。";
+  }
+
+  if (errorResponse.code === "request_cancelled") {
+    return "Realtime 会话请求已取消。";
+  }
+
   if (errorResponse.code === "openai_session_failed") {
     return `OpenAI 会话创建失败：${errorResponse.error}`;
   }
@@ -264,13 +284,16 @@ async function createRealtimeSession(
     requestBody.instructions = input.instructions;
   }
 
-  const response = await fetch("/api/realtime/session", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const response = await fetch(
+    "/api/realtime/session",
+    withClientAccessToken({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    }),
+  );
 
   if (!response.ok) {
     throw new Error(await readSessionError(response));

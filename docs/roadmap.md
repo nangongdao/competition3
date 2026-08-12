@@ -64,6 +64,7 @@ useless input, then cap output, then write down the measured results.**
 | #15 | `feat/chat-mode-browser-speech-adapter` | Browser speech adapter for Chat mode: Web Speech dictation fills the existing Chat text composer and optional speech synthesis reads Chat answers without provider audio tokens | merged |
 | #16 | `docs/final-demo-packaging` | Final demo packaging: local readiness script plus no-key, Chat Completions, Realtime, hardware, and cost-evidence verification checklist | merged |
 | #17 | `feat/worker-backed-speech-chat` | Worker-backed Chat voice transcription: short browser recording, `/api/speech/transcription` forwarding to OpenAI-compatible ASR, auto-send/review modes, and deployment docs | in progress |
+| #18 | `feat/worker-upstream-resilience` | Worker upstream resilience: endpoint timeouts, cancellation, one idempotent retry, bounded safe errors, structured request logs, and a SQLite Durable Object circuit breaker shared by Chat, Realtime, and transcription | in progress |
 
 Earlier foundation (merged via the initial feature commit): Vite/React/TS
 frontend, Hono Worker with `/api/realtime/session`, camera/mic permission
@@ -220,6 +221,7 @@ the final pass.*
 | Text-history summarization | After N turns, replace old text items with a compact summary item (client-built, then prune originals) | Real snowball reduction for long chats, but riskier UX (model may "forget" details); frames were the cheap 80% |
 | Session usage export | Download per-turn usage as JSON/CSV from the meter | Absorbed into 3.5 as the measurement export path |
 | Chat Completions compatibility | Worker HTTP adapter for third-party `/chat/completions` providers, plus a frontend mode switch that does not require WebRTC | Shipped as `feat/chat-completions-provider-mode`; audio streaming stays in Realtime mode |
+| Workspace and Realtime hook decomposition | Split the main workspace component and Realtime hook along state-machine, media, transport, and presentation boundaries with contract tests before moving behavior | Deferred to a separate focused PR so the reliability change does not combine infrastructure behavior with a high-risk frontend refactor |
 
 ---
 

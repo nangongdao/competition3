@@ -2,6 +2,11 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 
+import {
+  executeUpstreamRequest,
+  UpstreamRequestError,
+} from "../../lib/upstream/resilience";
+import { readJsonResponseBounded } from "../../lib/upstream/response";
 import type { AppEnv } from "../../types";
 import {
   chatCompletionInputSchema,
@@ -14,7 +19,7 @@ const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_CHAT_COMPLETIONS_PATH = "/chat/completions";
 const DEFAULT_CHAT_TOKEN_LIMIT_PARAMETER = "max_tokens";
 const DEFAULT_CHAT_VISION_INPUT = "enabled";
-const MAX_UPSTREAM_ERROR_SNIPPET_CHARS = 600;
+const CHAT_UPSTREAM_TIMEOUT_MS = 30_000;
 const DEFAULT_CHAT_INSTRUCTIONS =
   "You are a concise Chinese visual dialogue assistant. Answer the user's latest message using the supplied camera frame only when an image is included.";
 const BRIEF_RESPONSE_INSTRUCTION =
@@ -62,11 +67,6 @@ type ChatTokenLimitParameter =
   | "none";
 
 type ChatVisionInputMode = "enabled" | "disabled";
-
-type UpstreamResponseBody = {
-  value: unknown;
-  textSnippet: string | null;
-};
 
 export const chatRoutes = new Hono<AppEnv>();
 
@@ -117,23 +117,42 @@ chatRoutes.post("/completion", async (c) => {
     tokenLimitParameter: providerConfig.tokenLimitParameter,
   });
 
-  const upstreamResponse = await fetch(providerConfig.completionsUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  const upstreamBody = await readUpstreamBody(upstreamResponse);
+  let upstreamResponse: Response;
+
+  try {
+    upstreamResponse = await executeUpstreamRequest({
+      env: c.env,
+      operation: "chat",
+      url: providerConfig.completionsUrl,
+      requestId: c.get("requestId"),
+      requestSignal: c.req.raw.signal,
+      policy: {
+        timeoutMs: CHAT_UPSTREAM_TIMEOUT_MS,
+        maxAttempts: 2,
+      },
+      buildRequestInit: (idempotencyKey): RequestInit => ({
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+          "X-Request-Id": c.get("requestId"),
+        },
+        body: JSON.stringify(payload),
+      }),
+    });
+  } catch (error: unknown) {
+    return createUpstreamFailureResponse(c, error);
+  }
 
   if (!upstreamResponse.ok) {
     return c.json(createErrorResponse(
-      getUpstreamErrorMessage(upstreamBody) ??
-        `Chat Completions provider request failed with status ${upstreamResponse.status}.`,
+      "Chat Completions provider rejected the request.",
       "chat_completion_failed",
     ), 502);
   }
+
+  const upstreamBody = await readJsonResponseBounded(upstreamResponse);
 
   const answer = getChatAnswer(upstreamBody.value);
 
@@ -332,82 +351,50 @@ async function readJsonBody(c: Context<AppEnv>): Promise<unknown> {
   }
 }
 
-async function readUpstreamBody(response: Response): Promise<UpstreamResponseBody> {
-  const text = await response.text();
-
-  if (text.trim().length === 0) {
-    return {
-      value: null,
-      textSnippet: null,
-    };
+function createUpstreamFailureResponse(
+  c: Context<AppEnv>,
+  error: unknown,
+): Response {
+  if (!(error instanceof UpstreamRequestError)) {
+    throw error;
   }
 
-  try {
-    return {
-      value: JSON.parse(text) as unknown,
-      textSnippet: createTextSnippet(text),
-    };
-  } catch {
-    return {
-      value: null,
-      textSnippet: createTextSnippet(text),
-    };
-  }
-}
-
-function createTextSnippet(value: string): string | null {
-  const collapsedValue = value.replace(/\s+/g, " ").trim();
-
-  if (collapsedValue.length === 0) {
-    return null;
+  if (error.retryAfterSeconds !== undefined) {
+    c.header("Retry-After", String(error.retryAfterSeconds));
   }
 
-  if (collapsedValue.length <= MAX_UPSTREAM_ERROR_SNIPPET_CHARS) {
-    return collapsedValue;
+  if (error.kind === "timeout") {
+    return c.json(createErrorResponse(
+      "Chat Completions provider timed out.",
+      "chat_completion_timeout",
+    ), 504);
   }
 
-  return `${collapsedValue.slice(0, MAX_UPSTREAM_ERROR_SNIPPET_CHARS)}...`;
-}
-
-function getUpstreamErrorMessage(body: UpstreamResponseBody): string | undefined {
-  const structuredMessage = getStructuredUpstreamErrorMessage(body.value);
-
-  if (structuredMessage !== undefined) {
-    return structuredMessage;
+  if (error.kind === "rate-limited") {
+    return c.json(createErrorResponse(
+      "Chat Completions provider is temporarily rate limited.",
+      "chat_completion_rate_limited",
+    ), 503);
   }
 
-  return body.textSnippet === null
-    ? undefined
-    : `Provider returned ${body.textSnippet}`;
-}
-
-function getStructuredUpstreamErrorMessage(value: unknown): string | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
+  if (error.kind === "circuit-open") {
+    return c.json(createErrorResponse(
+      "Chat Completions provider is temporarily unavailable.",
+      "chat_completion_circuit_open",
+    ), 503);
   }
 
-  if ("error" in value) {
-    const errorValue = value.error;
-
-    if (
-      typeof errorValue === "object" &&
-      errorValue !== null &&
-      "message" in errorValue &&
-      typeof errorValue.message === "string"
-    ) {
-      return errorValue.message;
-    }
-
-    if (typeof errorValue === "string") {
-      return errorValue;
-    }
+  if (error.kind === "cancelled") {
+    return c.json(createErrorResponse(
+      "Chat Completions request was cancelled.",
+      "request_cancelled",
+    ), 408);
   }
 
-  if ("message" in value && typeof value.message === "string") {
-    return value.message;
-  }
-
-  return undefined;
+  return c.json(createErrorResponse(
+    "Chat Completions provider is temporarily unavailable.",
+    "chat_completion_unavailable",
+  ), 502);
 }
 
 function getChatAnswer(value: unknown): string | null {
