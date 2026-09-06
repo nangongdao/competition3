@@ -1,206 +1,108 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Activity,
-  Camera,
-  CircleStop,
-  Download,
-  FileJson,
-  FileText,
-  Gauge,
-  Image as ImageIcon,
-  Hand,
-  GripVertical,
-  Mic,
-  MicOff,
-  Play,
-  Radio,
-  RefreshCcw,
-  Send,
-  ShieldCheck,
-  Sparkles,
-  Trash2,
-  Video,
-  Volume2,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { GripVertical } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
+
+import { persistLanguage, type AppLanguage } from "@/i18n";
+import type { CommandAction } from "@/modules/assistant/lib/command-registry";
 
 import { useChatCompletion } from "@/modules/assistant/hooks/use-chat-completion";
+import { useAutoFrameSampling } from "@/modules/assistant/hooks/use-auto-frame-sampling";
+import { useContinuousChatVad } from "@/modules/assistant/hooks/use-continuous-chat-vad";
+import { useContinuousChatVoice } from "@/modules/assistant/hooks/use-continuous-chat-voice";
+import { useSendChatTurn } from "@/modules/assistant/hooks/use-send-chat-turn";
+import { useMessageSend } from "@/modules/assistant/hooks/use-message-send";
+import { useConversationActions } from "@/modules/assistant/hooks/use-conversation-actions";
+import { usePushToTalkEvents } from "@/modules/assistant/hooks/use-push-to-talk-events";
+import { useSessionStart } from "@/modules/assistant/hooks/use-session-start";
+import { useMediaAccess } from "@/modules/assistant/hooks/use-media-access";
+import { useWorkspaceControls } from "@/modules/assistant/hooks/use-workspace-controls";
+import { useWorkspaceControlsState } from "@/modules/assistant/hooks/use-workspace-controls-state";
+import { useWorkspaceActions } from "@/modules/assistant/hooks/use-workspace-actions";
 import { useBrowserSpeechAdapter } from "@/modules/assistant/hooks/use-browser-speech-adapter";
 import { useMediaCapture } from "@/modules/assistant/hooks/use-media-capture";
+import { useMediaPhaseSync } from "@/modules/assistant/hooks/use-media-phase-sync";
+import { useMediaStreamBinding } from "@/modules/assistant/hooks/use-media-stream-binding";
+import { useSpeechTranscript } from "@/modules/assistant/hooks/use-speech-transcript";
+import { useFrameCapture } from "@/modules/assistant/hooks/use-frame-capture";
+import { useSessionRestore } from "@/modules/assistant/hooks/use-session-restore";
+import { useAssistantStats } from "@/modules/assistant/hooks/use-assistant-stats";
 import { useProviderConfig } from "@/modules/assistant/hooks/use-provider-config";
+import { useSessions } from "@/modules/assistant/hooks/use-sessions";
+import { useSessionManagement } from "@/modules/assistant/hooks/use-session-management";
+import { useAssistantSession } from "@/modules/assistant/hooks/use-assistant-session";
 import { useWorkerSpeechTranscription } from "@/modules/assistant/hooks/use-worker-speech-transcription";
-import { useWorkspaceLayout } from "@/modules/assistant/hooks/use-workspace-layout";
-import { WorkspaceLayoutToolbar } from "@/modules/assistant/components/workspace-layout-toolbar";
-import { TranscriptList } from "@/modules/assistant/components/transcript-list";
+import { useChatUsageCollector } from "@/modules/assistant/hooks/use-chat-usage-collector";
+import { useGlobalUsage } from "@/modules/assistant/hooks/use-global-usage";
+import { useGlobalBudget } from "@/modules/assistant/hooks/use-global-budget";
+import { useCalibration } from "@/modules/assistant/hooks/use-calibration";
+import { useCalibrationWriteback } from "@/modules/assistant/hooks/use-calibration-writeback";
+import { useCalibratedCost } from "@/modules/assistant/hooks/use-calibrated-cost";
+import { useCostAlertNotifications } from "@/modules/assistant/hooks/use-cost-alert-notifications";
+import { CostAlertCenter } from "@/modules/assistant/components/usage/cost-alert-center";
 import {
-  REALTIME_IDLE_DISCONNECT_MS,
-  REALTIME_IDLE_WARNING_MS,
-  type RealtimeResponseMode,
+  GlobalShortcutHost,
+  type GlobalShortcutHostHandle,
+} from "@/modules/assistant/components/global-shortcut-host";
+import { useWorkspaceLayout } from "@/modules/assistant/hooks/use-workspace-layout";
+import { useWorkspacePanelInteraction } from "@/modules/assistant/hooks/use-workspace-panel-interaction";
+import { useTheme } from "@/modules/assistant/hooks/use-theme";
+import { isTauriRuntime } from "@/modules/assistant/hooks/use-tauri";
+import { DesktopWindowControls } from "@/modules/assistant/components/desktop-window-controls";
+import { TerminalPanel } from "@/modules/assistant/components/terminal/terminal-panel";
+import { WorkspaceLayoutToolbar } from "@/modules/assistant/components/workspace-layout-toolbar";
+import { SessionPanel } from "@/modules/assistant/components/session/session-panel";
+import { SessionSidebarDrawer } from "@/modules/assistant/components/session/session-sidebar-drawer";
+import { VisionColumn } from "@/modules/assistant/components/media/vision-column";
+import { buildWorkspacePanelProps } from "@/modules/assistant/lib/workspace-panel-props";
+import {
   useRealtimeSession,
 } from "@/modules/assistant/hooks/use-realtime-session";
+import { type FrameSignature } from "@/modules/assistant/lib/frame-diff";
+import { MAX_FRAME_WIDTH } from "@/modules/assistant/lib/frame-processing";
 import {
-  createConversationExportFilename,
-  isChatTurnRetryAllowed,
-  serializeConversationJson,
-  serializeConversationMarkdown,
-} from "@/modules/assistant/lib/conversation";
+  deriveFrameTelemetryStats,
+  deriveSampleRateStats,
+  EMPTY_FRAME_TELEMETRY,
+  recordFrameTelemetry,
+  recordSampleTick,
+  type FrameTelemetryState,
+} from "@/modules/assistant/lib/frame-telemetry";
 import {
-  formatTokens,
-  formatUsd,
-  serializeUsageReportCsv,
-  serializeUsageReportJson,
+  createInitialSceneMemoryState,
+  type SceneMemoryState,
+} from "@/modules/assistant/lib/scene-memory";
+import {
+  type SpatialAnnotation,
+} from "@/modules/assistant/lib/spatial-annotation";
+import { resolveVisibleError } from "@/modules/assistant/lib/error-resolution";
+import { resolveWorkspaceDerivedState } from "@/modules/assistant/lib/workspace-derived-state";
+import { useTranscriptDispatch } from "@/modules/assistant/hooks/use-transcript-dispatch";
+import { useWorkspaceShell } from "@/modules/assistant/hooks/use-workspace-shell";
+import { buildCalibratedUsageExport } from "@/modules/assistant/lib/usage-export";
+import {
+  chatUsageToUsageReport,
+  type ChatTurnEstimate,
+} from "@/modules/assistant/lib/chat-cost-model";
+import {
+  estimateCostUsd,
+  type UsageBuckets,
 } from "@/modules/assistant/lib/cost-model";
+import { realtimeUsageToRecord } from "@/modules/assistant/lib/usage-persistence";
+import { buildRetryableEntryIds } from "@/modules/assistant/lib/retryable-entry-ids";
+import { buildInitialTranscript } from "@/modules/assistant/lib/workspace-shell";
+import { resolveWorkspaceGating } from "@/modules/assistant/lib/workspace-gating";
 import {
-  createFrameSignatureFromImageData,
-  FRAME_DIFF_SEND_THRESHOLD,
-  shouldSendFrame,
-  type FrameSignature,
-} from "@/modules/assistant/lib/frame-diff";
-import { sampleFrameOffThread } from "@/modules/assistant/lib/frame-processing";
-import type {
-  AssistantPhase,
-  CostControlSetting,
-  MediaPermissionStatus,
-  RealtimeConnectionStatus,
-  TranscriptEntry,
-  TranscriptSpeaker,
-} from "@/modules/assistant/types";
-import type {
-  RealtimeResponseBudget,
-  RealtimeTurnDetectionMode,
-} from "../../../../src/worker/routes/realtime/types";
-import type { ProviderMode } from "../../../../src/worker/routes/provider/types";
+  resolveCostControlItems,
+  resolveWorkspaceStatusLabels,
+} from "@/modules/assistant/lib/workspace-status-labels";
+import { renderWorkspaceDisplayLabels } from "@/modules/assistant/lib/workspace-labels-render";
+import {
+  assistantReducer,
+  createInitialAssistantState,
+} from "@/modules/assistant/state/assistant-reducer";
 
-const initialTranscript: readonly TranscriptEntry[] = [
-  {
-    id: "entry-0",
-    speaker: "system",
-    text: "系统已就绪。",
-    createdAt: Date.now(),
-  },
-  {
-    id: "entry-1",
-    speaker: "assistant",
-    text: "Worker 会安全保管 OPENAI_API_KEY 和 OPENAI_CHAT_MODEL。你可以使用 Chat Completions，也可以切换到 Realtime 模式进行低延迟语音对话。",
-    createdAt: Date.now(),
-  },
-] as const;
-
-const phaseLabels: Record<AssistantPhase, string> = {
-  idle: "空闲",
-  ready: "已就绪",
-  connecting: "连接中",
-  listening: "聆听中",
-  thinking: "思考中",
-  responding: "回应中",
-  error: "需处理",
-};
-
-const mediaLabels: Record<MediaPermissionStatus, string> = {
-  idle: "未授权",
-  requesting: "请求中",
-  granted: "已授权",
-  denied: "已拒绝",
-  unsupported: "不支持",
-  error: "异常",
-};
-
-const realtimeLabels: Record<RealtimeConnectionStatus, string> = {
-  idle: "未连接",
-  "creating-session": "创建会话",
-  connecting: "连接中",
-  connected: "已连接",
-  error: "异常",
-};
-
-const turnDetectionLabels: Record<RealtimeTurnDetectionMode, string> = {
-  "server-vad": "服务端 VAD",
-  "push-to-talk": "按住说话",
-};
-
-const turnDetectionOptions: readonly {
-  value: RealtimeTurnDetectionMode;
-  label: string;
-}[] = [
-  {
-    value: "server-vad",
-    label: "服务端 VAD",
-  },
-  {
-    value: "push-to-talk",
-    label: "按住说话",
-  },
-] as const;
-
-const responseBudgetLabels: Record<RealtimeResponseBudget, string> = {
-  brief: "简短",
-  standard: "标准",
-  detailed: "详细",
-};
-
-const responseBudgetOptions: readonly {
-  value: RealtimeResponseBudget;
-  label: string;
-}[] = [
-  {
-    value: "brief",
-    label: "简短",
-  },
-  {
-    value: "standard",
-    label: "标准",
-  },
-  {
-    value: "detailed",
-    label: "详细",
-  },
-] as const;
-
-const visualContextModeLabels: Record<"manual" | "interval", string> = {
-  manual: "手动发送",
-  interval: "自动采样",
-};
-
-const responseModeLabels: Record<RealtimeResponseMode, string> = {
-  "audio-text": "语音+文本",
-  "text-only": "仅文本",
-};
-
-const providerModeLabels: Record<ProviderMode, string> = {
-  chat: "Chat Completions",
-  realtime: "Realtime",
-};
-
-const providerModeOptions: readonly {
-  value: ProviderMode;
-  label: string;
-}[] = [
-  {
-    value: "chat",
-    label: "兼容模式",
-  },
-  {
-    value: "realtime",
-    label: "Realtime",
-  },
-] as const;
-
-type ChatVoiceSendMode = "auto-send" | "review";
-
-const chatVoiceSendModeOptions: readonly {
-  value: ChatVoiceSendMode;
-  label: string;
-}[] = [
-  {
-    value: "auto-send",
-    label: "自动发送",
-  },
-  {
-    value: "review",
-    label: "先填入",
-  },
-] as const;
-
-type ChatVoiceCompletionSource = "manual" | "continuous";
+const initialTranscript = buildInitialTranscript();
 
 type RetryableChatTurn = {
   message: string;
@@ -208,79 +110,16 @@ type RetryableChatTurn = {
   signature?: FrameSignature;
 };
 
-const CONTINUOUS_CHAT_AUDIO_LEVEL_POLL_MS = 100;
-const CONTINUOUS_CHAT_MIN_RECORDING_MS = 900;
-const CONTINUOUS_CHAT_SILENCE_MS = 1_100;
-const CONTINUOUS_CHAT_MAX_RECORDING_MS = 12_000;
-const CONTINUOUS_CHAT_RESTART_DELAY_MS = 350;
-const CONTINUOUS_CHAT_SPEECH_THRESHOLD = 0.035;
-
-type AudioContextConstructor = typeof AudioContext;
-type BrowserAudioContextScope = Window & {
-  webkitAudioContext?: AudioContextConstructor;
-};
-
-function getAudioContextConstructor(): AudioContextConstructor | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const scope = window as BrowserAudioContextScope;
-
-  if (typeof AudioContext !== "undefined") {
-    return AudioContext;
-  }
-
-  return scope.webkitAudioContext ?? null;
-}
-
-function calculateAudioRootMeanSquare(samples: Uint8Array): number {
-  let squaredTotal = 0;
-
-  for (const sample of samples) {
-    const normalizedSample = (sample - 128) / 128;
-    squaredTotal += normalizedSample * normalizedSample;
-  }
-
-  return Math.sqrt(squaredTotal / samples.length);
-}
-
-function isActiveSession(phase: AssistantPhase): boolean {
-  return (
-    phase === "connecting" ||
-    phase === "listening" ||
-    phase === "thinking" ||
-    phase === "responding"
-  );
-}
-
-function buildDownloadDataUrl(contentType: string, content: string): string {
-  return `data:${contentType};charset=utf-8,${encodeURIComponent(content)}`;
-}
-
-function downloadTextFile(
-  content: string,
-  contentType: string,
-  filename: string,
-): void {
-  const objectUrl = URL.createObjectURL(
-    new Blob([content], { type: `${contentType};charset=utf-8` }),
-  );
-  const link = document.createElement("a");
-  link.href = objectUrl;
-  link.download = filename;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-}
-
-type CapturedFrame = {
-  frameDataUrl: string;
-  signature: FrameSignature;
-};
-
 export function AssistantWorkspace(): React.JSX.Element {
+  const { t, i18n: i18nClient } = useTranslation();
+  const navigate = useNavigate();
+  // 桌面终端开关：仅 Tauri 环境启用，浏览器隐藏终端入口。
+  const isDesktop = isTauriRuntime();
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const handleToggleTerminal = useCallback(() => {
+    setIsTerminalOpen((open) => !open);
+  }, []);
   const assistantShellRef = useRef<HTMLElement | null>(null);
-  const draggedPanelRef = useRef<"session" | "vision" | null>(null);
   const {
     layout,
     resetLayout,
@@ -289,6 +128,7 @@ export function AssistantWorkspace(): React.JSX.Element {
     swapPanels,
     togglePanel,
   } = useWorkspaceLayout();
+  const { preference, setPreference } = useTheme();
   const { mediaState, requestAccess, stopAccess, stream } = useMediaCapture();
   const {
     providerMode,
@@ -298,109 +138,262 @@ export function AssistantWorkspace(): React.JSX.Element {
     setProviderMode,
   } = useProviderConfig();
   const { chatState, sendChatCompletion } = useChatCompletion();
-  const [assistantPhase, setAssistantPhase] = useState<AssistantPhase>("idle");
-  const [transcript, setTranscript] = useState<readonly TranscriptEntry[]>(
-    initialTranscript,
+  const {
+    sessionState,
+    initialize: initializeSessions,
+    newSession: newPersistedSession,
+    switchSession: switchPersistedSession,
+    persistMessage,
+    restoreSceneMemory,
+    persistSceneMemory,
+    restoreUsage,
+    persistUsage,
+    loadGlobalUsageTotals,
+    rename: renamePersistedSession,
+    remove: removePersistedSession,
+    exportSession: exportPersistedSession,
+    pruneEmptySessions,
+  } = useSessions();
+  // 会话级用量持久化：把每轮 Chat 用量写入当前会话的 D1 记录。
+  const persistChatUsage = useCallback(
+    (estimate: ChatTurnEstimate) => {
+      void persistUsage({
+        mode: "chat",
+        inputTokens: estimate.inputTokens,
+        inputTextTokens: estimate.inputTextTokens,
+        inputAudioTokens: 0,
+        inputImageTokens: estimate.inputImageTokens,
+        outputTokens: estimate.outputTokens,
+        outputTextTokens: estimate.outputTextTokens,
+        outputAudioTokens: 0,
+        estimatedCostUsd: estimate.estimatedCostUsd,
+      });
+    },
+    [persistUsage],
   );
-  const [lastFrameDataUrl, setLastFrameDataUrl] = useState<string | null>(null);
-  const [sampledFrameCount, setSampledFrameCount] = useState(0);
-  const [sentFrameCount, setSentFrameCount] = useState(0);
-  const [skippedAutoFrameCount, setSkippedAutoFrameCount] = useState(0);
-  const [isAutoSampling, setIsAutoSampling] = useState(false);
-  const [samplingIntervalSeconds, setSamplingIntervalSeconds] = useState(8);
-  const [isFramePruningEnabled, setIsFramePruningEnabled] = useState(true);
-  const [turnDetectionMode, setTurnDetectionMode] =
-    useState<RealtimeTurnDetectionMode>("server-vad");
-  const [responseBudget, setResponseBudget] =
-    useState<RealtimeResponseBudget>("standard");
-  const [responseMode, setResponseMode] =
-    useState<RealtimeResponseMode>("audio-text");
-  const [isChatAnswerSpeechEnabled, setIsChatAnswerSpeechEnabled] =
-    useState(false);
-  const [isContinuousChatVoiceEnabled, setIsContinuousChatVoiceEnabled] =
-    useState(false);
-  const [chatVoiceSendMode, setChatVoiceSendMode] =
-    useState<ChatVoiceSendMode>("auto-send");
-  const [textDraft, setTextDraft] = useState("");
+  const { chatUsageReport, resetChatUsage, recordChatTurn, seedFromPersistedTotals } =
+    useChatUsageCollector({ persistUsage: persistChatUsage });
+  const [assistantState, dispatch] = useReducer(
+    assistantReducer,
+    initialTranscript,
+    createInitialAssistantState,
+  );
+  const assistantPhase = assistantState.phase;
+  const transcript = assistantState.transcript;
+  const lastFrameDataUrl = assistantState.lastFrameDataUrl;
+  const sampledFrameCount = assistantState.frameStats.sampled;
+  const sentFrameCount = assistantState.frameStats.sent;
+  const skippedAutoFrameCount = assistantState.frameStats.skippedAuto;
+  const {
+    isAutoSampling,
+    setIsAutoSampling,
+    samplingIntervalSeconds,
+    setSamplingIntervalSeconds,
+    isFramePruningEnabled,
+    setIsFramePruningEnabled,
+    turnDetectionMode,
+    setTurnDetectionMode,
+    responseBudget,
+    setResponseBudget,
+    responseMode,
+    setResponseMode,
+    isChatAnswerSpeechEnabled,
+    setIsChatAnswerSpeechEnabled,
+    chatVoiceSendMode,
+    setChatVoiceSendMode,
+    textDraft,
+    setTextDraft,
+    isTextHistorySummaryEnabled,
+    setIsTextHistorySummaryEnabled,
+  } = useWorkspaceControlsState();
   const [retryableChatTurns, setRetryableChatTurns] = useState<
     Readonly<Record<string, RetryableChatTurn>>
   >({});
-  const [isClearConfirmationVisible, setIsClearConfirmationVisible] =
-    useState(false);
+  const {
+    isClearConfirmationVisible,
+    setIsClearConfirmationVisible,
+    isSessionSidebarOpen,
+    toggleSessionSidebar,
+    closeSessionSidebar,
+    requestClear,
+    cancelClear,
+  } = useWorkspaceShell();
+
+  // M10.8 全局命令面板命令表：导航 / 面板 / 偏好三类动作，统一键盘入口。
+  const commandPaletteCommands = useMemo<readonly CommandAction[]>(() => {
+    const switchLanguage = (language: AppLanguage): void => {
+      persistLanguage(language);
+      void i18nClient.changeLanguage(language);
+    };
+    return [
+      {
+        id: "nav-home",
+        group: "navigation",
+        labelKey: "commandPalette.navHome",
+        hintKey: "commandPalette.navHomeHint",
+        keywords: ["home", "workspace", "工作台", "assistant"],
+        action: () => navigate("/"),
+      },
+      {
+        id: "nav-costs",
+        group: "navigation",
+        labelKey: "commandPalette.navCosts",
+        hintKey: "commandPalette.navCostsHint",
+        keywords: ["cost", "dashboard", "驾驶舱", "成本", "usage"],
+        action: () => navigate("/costs"),
+      },
+      {
+        id: "panel-cost",
+        group: "panels",
+        labelKey: "commandPalette.panelCost",
+        hintKey: "commandPalette.panelCostHint",
+        keywords: ["console", "控制台", "成本", "cost"],
+        action: () => togglePanel("cost"),
+      },
+      {
+        id: "panel-usage",
+        group: "panels",
+        labelKey: "commandPalette.panelUsage",
+        hintKey: "commandPalette.panelUsageHint",
+        keywords: ["usage", "用量", "成本"],
+        action: () => togglePanel("usage"),
+      },
+      {
+        id: "panel-visual-context",
+        group: "panels",
+        labelKey: "commandPalette.panelVisualContext",
+        hintKey: "commandPalette.panelVisualContextHint",
+        keywords: ["frames", "frames", "画面", "recent", "visual"],
+        action: () => togglePanel("visualContext"),
+      },
+      {
+        id: "panel-sessions",
+        group: "panels",
+        labelKey: "commandPalette.panelSessions",
+        hintKey: "commandPalette.panelSessionsHint",
+        keywords: ["sessions", "会话", "列表", "sidebar"],
+        action: () => toggleSessionSidebar(),
+      },
+      ...(isDesktop
+        ? [
+            {
+              id: "terminal-toggle",
+              group: "panels",
+              labelKey: "commandPalette.terminalToggle",
+              hintKey: "commandPalette.terminalToggleHint",
+              keywords: ["terminal", "终端", "xterm"],
+              action: handleToggleTerminal,
+            } as const,
+          ]
+        : []),
+      {
+        id: "pref-theme-dark",
+        group: "preferences",
+        labelKey: "commandPalette.themeDark",
+        hintKey: "commandPalette.themeDarkHint",
+        keywords: ["dark", "暗色", "主题", "theme"],
+        action: () => setPreference("dark"),
+      },
+      {
+        id: "pref-theme-light",
+        group: "preferences",
+        labelKey: "commandPalette.themeLight",
+        hintKey: "commandPalette.themeLightHint",
+        keywords: ["light", "亮色", "主题", "theme"],
+        action: () => setPreference("light"),
+      },
+      {
+        id: "pref-theme-system",
+        group: "preferences",
+        labelKey: "commandPalette.themeSystem",
+        hintKey: "commandPalette.themeSystemHint",
+        keywords: ["system", "系统", "主题", "theme"],
+        action: () => setPreference("system"),
+      },
+      {
+        id: "pref-language-zh",
+        group: "preferences",
+        labelKey: "commandPalette.languageZh",
+        keywords: ["zh", "中文", "语言", "language"],
+        action: () => switchLanguage("zh"),
+      },
+      {
+        id: "pref-language-en",
+        group: "preferences",
+        labelKey: "commandPalette.languageEn",
+        keywords: ["en", "english", "语言", "language"],
+        action: () => switchLanguage("en"),
+      },
+      {
+        id: "pref-reset-layout",
+        group: "preferences",
+        labelKey: "commandPalette.resetLayout",
+        hintKey: "commandPalette.resetLayoutHint",
+        keywords: ["reset", "reset", "默认", "layout", "布局"],
+        action: () => resetLayout(),
+      },
+    ];
+  }, [
+    navigate,
+    isDesktop,
+    togglePanel,
+    toggleSessionSidebar,
+    handleToggleTerminal,
+    setPreference,
+    resetLayout,
+    i18nClient,
+  ]);
+
+  // M10.8 全局命令面板 + 快捷键宿主句柄（供工具栏按钮打开面板）。
+  const commandPaletteHostRef = useRef<GlobalShortcutHostHandle>(null);
+
   const nextEntryIdRef = useRef(initialTranscript.length);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastUploadedFrameSignatureRef = useRef<FrameSignature | null>(null);
-  const continuousChatVoiceRef = useRef(false);
-  const continuousChatRestartTimeoutRef = useRef<number | null>(null);
-  const isCompletingChatVoiceRef = useRef(false);
+  const hasRestoredSessionRef = useRef(false);
+  // M3.2 会话持久化：首次挂载防重复初始化（兼容 StrictMode 双执行）。
+  const hasInitializedRef = useRef(false);
+  // M4.1 场景记忆：最近 N 个关键帧的文字摘要（替代历史图片的低成本上下文）。
+  const sceneMemoryRef = useRef<SceneMemoryState>(createInitialSceneMemoryState());
+  // M4.1/M4.2 UI 统计状态：场景记忆摘要 + 多模态融合 + 文本历史摘要（领域聚合 hook）。
+  const {
+    sceneMemoryStats,
+    setSceneMemoryStats,
+    fusionStats,
+    setFusionStats,
+    textHistoryStats,
+    setTextHistoryStats,
+  } = useAssistantStats();
+  // M4.3 空间定位标注：模型回复中解析出的归一化坐标标注（叠加在摄像头预览上）。
+  const [spatialAnnotations, setSpatialAnnotations] = useState<readonly SpatialAnnotation[]>([]);
+  // 帧采样性能遥测：离屏 Worker 帧处理耗时统计（平均/最大/最近）。
+  const [frameTelemetry, setFrameTelemetry] = useState<FrameTelemetryState>(EMPTY_FRAME_TELEMETRY);
 
-  const hasMedia = mediaState.status === "granted" && stream !== null;
-  const hasActiveSession = isActiveSession(assistantPhase);
+  const { addTranscript, setTranscriptDeliveryStatus, handleRealtimePhaseChange } =
+    useTranscriptDispatch({
+      nextEntryIdRef,
+      dispatch,
+    });
 
-  const addTranscript = useCallback(
-    (
-      speaker: TranscriptSpeaker,
-      text: string,
-      deliveryStatus?: TranscriptEntry["deliveryStatus"],
-    ): string => {
-      const id = `entry-${nextEntryIdRef.current}`;
-      nextEntryIdRef.current += 1;
+  // M3.2 会话持久化 + M4.1 场景记忆：会话列表加载完成后恢复历史消息与场景摘要。
+  useSessionRestore({
+    initializeSessions,
+    hasInitializedRef,
+    isLoaded: sessionState.isLoaded,
+    activeSessionId: sessionState.activeSessionId,
+    dispatch,
+    addTranscript,
+    switchPersistedSession,
+    restoreSceneMemory,
+    nextEntryIdRef,
+    sceneMemoryRef,
+    hasRestoredSessionRef,
+  });
 
-      setTranscript((current) => [
-        ...current,
-        {
-          id,
-          speaker,
-          text,
-          createdAt: Date.now(),
-          ...(deliveryStatus === undefined ? {} : { deliveryStatus }),
-        },
-      ]);
-
-      return id;
-    },
-    [],
-  );
-
-  const setTranscriptDeliveryStatus = useCallback(
-    (entryId: string, deliveryStatus: TranscriptEntry["deliveryStatus"]): void => {
-      setTranscript((current) =>
-        current.map((entry) =>
-          entry.id === entryId ? { ...entry, deliveryStatus } : entry,
-        ),
-      );
-    },
-    [],
-  );
-
-  const handleRealtimePhaseChange = useCallback((phase: AssistantPhase): void => {
-    setAssistantPhase(phase);
-  }, []);
-
-  const handleChatSpeechTranscript = useCallback(
-    (recognizedText: string): void => {
-      setTextDraft((currentDraft) => {
-        const trimmedCurrentDraft = currentDraft.trim();
-
-        if (trimmedCurrentDraft.length === 0) {
-          return recognizedText;
-        }
-
-        return `${trimmedCurrentDraft} ${recognizedText}`;
-      });
-      addTranscript("system", "语音识别结果已填入输入框。");
-    },
-    [addTranscript],
-  );
-
-  const handleBrowserSpeechStatus = useCallback(
-    (message: string): void => {
-      addTranscript("system", message);
-    },
-    [addTranscript],
-  );
+  const { handleChatSpeechTranscript, handleBrowserSpeechStatus } =
+    useSpeechTranscript({ setTextDraft, addTranscript });
 
   const {
     speechState,
@@ -422,11 +415,21 @@ export function AssistantWorkspace(): React.JSX.Element {
     onStatusMessage: handleBrowserSpeechStatus,
   });
 
+  // 会话级用量持久化：把每轮 Realtime 权威用量写入当前会话的 D1 记录。
+  const persistRealtimeUsage = useCallback(
+    (usage: UsageBuckets) => {
+      void persistUsage(realtimeUsageToRecord(usage, estimateCostUsd(usage)));
+    },
+    [persistUsage],
+  );
+
   const {
     realtimeState,
     remoteStream,
     usageReport,
     prunedFrameCount,
+    seedUsageFromPersistedTotals,
+    resetUsage: resetRealtimeUsage,
     startSession: startRealtimeSession,
     stopSession: stopRealtimeSession,
     sendVisualContext,
@@ -442,1349 +445,653 @@ export function AssistantWorkspace(): React.JSX.Element {
     onPhaseChange: handleRealtimePhaseChange,
     pruneConsumedFrames: isFramePruningEnabled,
     responseMode,
+    persistUsage: persistRealtimeUsage,
   });
 
-  const hasRealtimeConnection = realtimeState.status === "connected";
-  const isChatMode = providerMode === "chat";
-  const isRealtimeMode = providerMode === "realtime";
-  const isChatVoiceRecording = transcriptionState.status === "recording";
-  const isChatVoiceTranscribing = transcriptionState.status === "transcribing";
-  const isChatVoiceBusy = isChatVoiceRecording || isChatVoiceTranscribing;
-  const retryableEntryIds = useMemo(
-    () => new Set(Object.keys(retryableChatTurns)),
-    [retryableChatTurns],
-  );
-  const usageExport = useMemo(() => {
-    const generatedAt = Date.now();
-
-    return {
-      jsonDownloadUrl: buildDownloadDataUrl(
-        "application/json",
-        serializeUsageReportJson(usageReport, generatedAt),
-      ),
-      csvDownloadUrl: buildDownloadDataUrl(
-        "text/csv",
-        serializeUsageReportCsv(usageReport, generatedAt),
-      ),
-      jsonFilename: `realtime-usage-${generatedAt}.json`,
-      csvFilename: `realtime-usage-${generatedAt}.csv`,
-    };
-  }, [usageReport]);
-  const activeTurnDetectionMode =
-    realtimeState.costPolicy?.turnDetectionMode ?? turnDetectionMode;
-  const activeResponseBudget =
-    realtimeState.costPolicy?.responseBudget ?? responseBudget;
-  const isPushToTalkMode = activeTurnDetectionMode === "push-to-talk";
-  const microphoneStatusLabel = !hasMedia
-    ? "等待授权"
-    : isChatMode
-      ? isContinuousChatVoiceEnabled
-        ? isChatVoiceRecording
-          ? "连续聆听"
-          : isChatVoiceTranscribing
-            ? "正在转写"
-            : chatState.isSending
-              ? "等待回答"
-              : speechState.isSpeaking
-                ? "正在朗读"
-                : "连续待命"
-      : isChatVoiceRecording
-        ? "正在录音"
-        : isChatVoiceTranscribing
-          ? "正在转写"
-          : transcriptionState.isRecordingSupported
-            ? "可语音提问"
-            : "不支持录音"
-      : isMicrophoneMuted
-        ? "麦克风已静音"
-        : isPushToTalkMode
-          ? isPushToTalkActive
-            ? "正在说话"
-            : "按住说话"
-          : "麦克风已开启";
-  const chatSpeechStatusLabel = !transcriptionState.isRecordingSupported
-    ? "当前浏览器不支持本地录音，请改用键盘输入。"
-    : !hasMedia
-      ? "请先授权摄像头和麦克风，再使用语音提问。"
-      : isContinuousChatVoiceEnabled
-        ? isChatVoiceRecording
-          ? "连续对话正在听你说话，说完会自动转写。"
-          : isChatVoiceTranscribing
-            ? "连续对话正在通过 Worker 转写语音。"
-            : chatState.isSending
-              ? "连续对话正在等待模型回答。"
-              : speechState.isSpeaking
-                ? "正在朗读回答，结束后会继续听你说话。"
-                : "连续语音对话已开启。"
-        : isChatVoiceRecording
-          ? "正在录音，说完后点击停止并转写。"
-          : isChatVoiceTranscribing
-            ? "正在通过 Worker 转写语音。"
-            : transcriptionState.status === "error"
-              ? transcriptionState.errorMessage ?? "语音转写异常。"
-              : chatVoiceSendMode === "auto-send"
-                ? "录音会先转文字，再自动发送到 Chat。"
-                : "录音会先转文字，并填入输入框供你确认。";
-  const costControls: readonly CostControlSetting[] = [
-    {
-      label: "提供方式",
-      value: providerModeLabels[providerMode],
-      detail: isChatMode
-        ? "通过 HTTP 调用 /v1/chat/completions，兼容常见 API 网关"
-        : "WebRTC Realtime 直连，适合低延迟语音互动",
-    },
-    {
-      label: "视觉上下文",
-      value:
-        isChatMode
-          ? "按需截帧"
-          : visualContextModeLabels[
-              realtimeState.costPolicy?.visualContextMode ??
-                (isAutoSampling ? "interval" : "manual")
-            ],
-      detail: isChatMode
-        ? "每次提问时只发送一张当前画面"
-        : "只发送抽样 JPEG，不连续上传原始视频",
-    },
-    {
-      label: "会话时长",
-      value: isChatMode
-        ? "按请求结束"
-        : realtimeState.costPolicy
-        ? `${Math.round(realtimeState.costPolicy.maxSessionSeconds / 60)} 分钟`
-        : "10 分钟",
-      detail: isChatMode
-        ? "Chat Completions 不保持 WebRTC 长连接"
-        : "限制单次 Realtime 会话，避免空转成本",
-    },
-    {
-      label: "空闲断开",
-      value: `${Math.round(REALTIME_IDLE_DISCONNECT_MS / 1000)} 秒`,
-      detail: `${Math.round(
-        REALTIME_IDLE_WARNING_MS / 1000,
-      )} 秒后提示，长时间无操作会自动断开`,
-    },
-    {
-      label: "回答预算",
-      value: realtimeState.costPolicy
-        ? `${responseBudgetLabels[activeResponseBudget]} / ${formatTokens(
-            realtimeState.costPolicy.maxResponseOutputTokens,
-          )}`
-        : responseBudgetLabels[activeResponseBudget],
-      detail: "Worker 为模型输出设置最大 token 数",
-    },
-    {
-      label: "输出模式",
-      value: isChatMode
-        ? isContinuousChatVoiceEnabled
-          ? "文本+连续朗读"
-          : isChatAnswerSpeechEnabled
-          ? "文本+本机朗读"
-          : "文本"
-        : responseModeLabels[responseMode],
-      detail: isChatMode
-        ? "Chat 朗读由浏览器完成，不产生模型音频 token"
-        : responseMode === "text-only"
-          ? "仅请求文本输出，减少音频 token"
-          : "同时请求语音和文本回复",
-    },
-    {
-      label: "密钥位置",
-      value: "服务器端",
-      detail: "永久密钥只保存在 Worker 环境变量中",
-    },
-    {
-      label: "轮次触发",
-      value: isChatMode
-        ? isContinuousChatVoiceEnabled
-          ? "连续 Worker 转写"
-          : transcriptionState.isRecordingSupported
-          ? "Worker 转写"
-          : "键盘输入"
-        : turnDetectionLabels[activeTurnDetectionMode],
-      detail: isChatMode
-        ? "浏览器录制短音频，Worker 转成文字后再发送 Chat 请求"
-        : activeTurnDetectionMode === "push-to-talk"
-          ? "按住按钮时采集麦克风，松开后提交"
-          : "服务端 VAD 自动判断用户说话结束",
-    },
-    {
-      label: "麦克风",
-      value: microphoneStatusLabel,
-      detail: isChatMode
-        ? "仅在语音提问时上传一段短录音用于转写"
-        : isMicrophoneMuted
-          ? "当前不会发送麦克风音频"
-          : "音频通过 Realtime 会话发送",
-    },
-    {
-      label: "帧差阈值",
-      value: `${Math.round(FRAME_DIFF_SEND_THRESHOLD * 100)}%`,
-      detail: "自动采样会跳过变化很小的画面",
-    },
-  ] as const;
-
-  const captureFrame = useCallback(
-    (source: "manual" | "auto"): CapturedFrame | null => {
-      const videoElement = videoRef.current;
-      const canvasElement = canvasRef.current;
-
-      if (
-        !hasMedia ||
-        videoElement === null ||
-        canvasElement === null ||
-        videoElement.videoWidth === 0 ||
-        videoElement.videoHeight === 0
-      ) {
-        if (source === "manual") {
-          addTranscript("system", "请先授权摄像头后再采样画面。");
-        }
-
-        return null;
-      }
-
-      const maxFrameWidth = 640;
-      const scale = Math.min(1, maxFrameWidth / videoElement.videoWidth);
-      canvasElement.width = Math.round(videoElement.videoWidth * scale);
-      canvasElement.height = Math.round(videoElement.videoHeight * scale);
-
-      const context = canvasElement.getContext("2d");
-
-      if (context === null) {
-        if (source === "manual") {
-          addTranscript("system", "当前浏览器无法读取画面。");
-        }
-
-        return null;
-      }
-
-      context.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
-      let signature: FrameSignature;
-
-      try {
-        signature = createFrameSignatureFromImageData(
-          context.getImageData(0, 0, canvasElement.width, canvasElement.height),
-        );
-      } catch {
-        if (source === "manual") {
-          addTranscript(
-            "system",
-            "无法分析当前画面，请重试。",
-          );
-        }
-
-        return null;
-      }
-
-      const frameDataUrl = canvasElement.toDataURL("image/jpeg", 0.72);
-      setLastFrameDataUrl(frameDataUrl);
-      setSampledFrameCount((currentCount) => currentCount + 1);
-
-      if (source === "manual") {
-        addTranscript("system", "已采样当前画面。");
-      }
-
-      return {
-        frameDataUrl,
-        signature,
-      };
-    },
-    [addTranscript, hasMedia],
-  );
-
-  const captureFrameAsync = useCallback(
-    async (source: "manual" | "auto"): Promise<CapturedFrame | null> => {
-      const videoElement = videoRef.current;
-
-      if (
-        !hasMedia ||
-        videoElement === null ||
-        videoElement.videoWidth === 0 ||
-        videoElement.videoHeight === 0
-      ) {
-        return captureFrame(source);
-      }
-
-      // Worker 线程处理：避免 getImageData/toDataURL 阻塞主线程渲染
-      const offThreadResult = await sampleFrameOffThread(videoElement);
-
-      if (offThreadResult !== null) {
-        setLastFrameDataUrl(offThreadResult.dataUrl);
-        setSampledFrameCount((currentCount) => currentCount + 1);
-
-        if (source === "manual") {
-          addTranscript("system", "已采样当前画面。");
-        }
-
-        return {
-          frameDataUrl: offThreadResult.dataUrl,
-          signature: offThreadResult.signature,
-        };
-      }
-
-      // 浏览器不支持 Worker 处理时回退到同步路径
-      return captureFrame(source);
-    },
-    [addTranscript, captureFrame, hasMedia],
-  );
-
-  const recordUploadedFrame = useCallback((signature: FrameSignature): void => {
-    lastUploadedFrameSignatureRef.current = signature;
-    setSentFrameCount((currentCount) => currentCount + 1);
-  }, []);
-
-  const stopSession = useCallback((): void => {
-    const shouldLogStop = hasActiveSession || hasRealtimeConnection;
-    stopRealtimeSession();
-
-    if (shouldLogStop) {
-      addTranscript("system", "Realtime 会话已停止。");
-    }
-
-    setAssistantPhase(mediaState.status === "granted" ? "ready" : "idle");
-  }, [
-    addTranscript,
-    hasActiveSession,
-    hasRealtimeConnection,
-    mediaState.status,
-    stopRealtimeSession,
-  ]);
-
-  const sendChatTurn = useCallback(
-    async (input: {
-      userEntryId: string;
-      message: string;
-      imageDataUrl?: string;
-      signature?: FrameSignature;
-      awaitSpeech?: boolean;
-      forceSpeech?: boolean;
-    }): Promise<boolean> => {
-      setAssistantPhase("thinking");
-
-      const response = await sendChatCompletion({
-        message: input.message,
-        imageDataUrl: input.imageDataUrl,
-        responseBudget,
-        instructions:
-          "你是一个中文视觉对话助手。请结合用户文字和随附画面，用简洁自然的中文回答。",
-      });
-
-      if (response === null) {
-        setAssistantPhase("error");
-        setTranscriptDeliveryStatus(input.userEntryId, "failed");
-        setRetryableChatTurns((current) => ({
-          ...current,
-          [input.userEntryId]: {
-            message: input.message,
-            ...(input.imageDataUrl === undefined
-              ? {}
-              : { imageDataUrl: input.imageDataUrl }),
-            ...(input.signature === undefined
-              ? {}
-              : { signature: input.signature }),
-          },
-        }));
-        addTranscript("system", "Chat Completions 请求失败，请检查配置或稍后重试。");
-        return false;
-      }
-
-      setTranscriptDeliveryStatus(input.userEntryId, "sent");
-      setRetryableChatTurns((current) =>
-        Object.fromEntries(
-          Object.entries(current).filter(
-            ([entryId]) => entryId !== input.userEntryId,
-          ),
-        ),
-      );
-
-      if (input.signature !== undefined) {
-        recordUploadedFrame(input.signature);
-      }
-
-      addTranscript("assistant", response.answer);
-      if (input.forceSpeech === true || isChatAnswerSpeechEnabled) {
-        const speechResult = speakChatAnswer(response.answer);
-
-        if (input.awaitSpeech === true) {
-          await speechResult;
-        } else {
-          void speechResult;
-        }
-      }
-      setAssistantPhase(mediaState.status === "granted" ? "ready" : "idle");
-      return true;
-    },
-    [
-      addTranscript,
-      isChatAnswerSpeechEnabled,
-      mediaState.status,
-      recordUploadedFrame,
-      responseBudget,
-      sendChatCompletion,
-      setTranscriptDeliveryStatus,
-      speakChatAnswer,
-    ],
-  );
-
-  const clearContinuousChatRestart = useCallback((): void => {
-    if (continuousChatRestartTimeoutRef.current !== null) {
-      window.clearTimeout(continuousChatRestartTimeoutRef.current);
-      continuousChatRestartTimeoutRef.current = null;
-    }
-  }, []);
-
-  const disableContinuousChatVoice = useCallback((): void => {
-    continuousChatVoiceRef.current = false;
-    setIsContinuousChatVoiceEnabled(false);
-    clearContinuousChatRestart();
-  }, [clearContinuousChatRestart]);
-
-  const scheduleNextContinuousRecording = useCallback((): void => {
-    clearContinuousChatRestart();
-
-    if (!continuousChatVoiceRef.current) {
+  // 会话级用量持久化：切换/恢复当前会话时，从 D1 恢复该会话的历史累计用量。
+  // 让跨会话累计在切换回某个会话后依然可见（替代仅当前页面内的内存计量）。
+  useEffect(() => {
+    if (!sessionState.isLoaded || sessionState.activeSessionId === null) {
       return;
     }
 
-    continuousChatRestartTimeoutRef.current = window.setTimeout(() => {
-      continuousChatRestartTimeoutRef.current = null;
-
-      if (!continuousChatVoiceRef.current) {
+    void restoreUsage().then((usage) => {
+      if (usage === null) {
+        resetChatUsage();
+        resetRealtimeUsage();
         return;
       }
-
-      const started = startChatVoiceRecording();
-
-      if (!started) {
-        disableContinuousChatVoice();
-        addTranscript("system", "连续语音对话已停止。");
-      }
-    }, CONTINUOUS_CHAT_RESTART_DELAY_MS);
+      seedFromPersistedTotals(usage.totals);
+      seedUsageFromPersistedTotals(usage.totals);
+    });
   }, [
-    addTranscript,
-    clearContinuousChatRestart,
-    disableContinuousChatVoice,
-    startChatVoiceRecording,
+    sessionState.isLoaded,
+    sessionState.activeSessionId,
+    restoreUsage,
+    resetChatUsage,
+    resetRealtimeUsage,
+    seedFromPersistedTotals,
+    seedUsageFromPersistedTotals,
   ]);
 
-  const completeChatVoiceRecording = useCallback(
-    async (source: ChatVoiceCompletionSource): Promise<void> => {
-      if (isCompletingChatVoiceRef.current) {
-        return;
-      }
+  // ①③ 全局预算护栏 + 跨会话成本对比状态（收敛为 useGlobalBudget hook）。
+  const {
+    guardrail: budgetGuardrail,
+    monthSpentUsd,
+    monthEndForecast,
+    comparison: sessionComparison,
+    costCockpit,
+    budgetHistory,
+    saveBudget: handleSaveBudget,
+    isSavingBudget,
+  } = useGlobalBudget({
+    isLoaded: sessionState.isLoaded,
+  });
 
-      isCompletingChatVoiceRef.current = true;
-
-      try {
-        if (source === "manual") {
-          addTranscript("system", "已停止录音，正在转写语音。");
-        }
-
-        const transcription = await stopChatVoiceRecording();
-
-        if (transcription === null) {
-          if (source === "continuous" && continuousChatVoiceRef.current) {
-            disableContinuousChatVoice();
-            addTranscript("system", "连续语音对话已停止。");
-          }
-          return;
-        }
-
-        const recognizedText = transcription.text.trim();
-
-        if (recognizedText.length === 0) {
-          addTranscript("system", "语音转写结果为空，请再试一次。");
-
-          if (source === "continuous" && continuousChatVoiceRef.current) {
-            disableContinuousChatVoice();
-            addTranscript("system", "连续语音对话已停止。");
-          }
-          return;
-        }
-
-        if (source === "continuous" && !continuousChatVoiceRef.current) {
-          return;
-        }
-
-        if (source === "manual" && chatVoiceSendMode === "review") {
-          setTextDraft((currentDraft) => {
-            const trimmedCurrentDraft = currentDraft.trim();
-
-            if (trimmedCurrentDraft.length === 0) {
-              return recognizedText;
-            }
-
-            return `${trimmedCurrentDraft} ${recognizedText}`;
-          });
-          addTranscript("system", "语音已转写并填入输入框。");
-          return;
-        }
-
-        const shouldContinue =
-          source === "continuous" && continuousChatVoiceRef.current;
-        const userEntryId = addTranscript("user", recognizedText, "sent");
-        const sent = await sendChatTurn({
-          userEntryId,
-          message: recognizedText,
-          awaitSpeech: shouldContinue,
-          forceSpeech: shouldContinue,
-        });
-
-        if (!sent) {
-          if (shouldContinue) {
-            disableContinuousChatVoice();
-            addTranscript("system", "连续语音对话已停止。");
-          }
-          return;
-        }
-
-        if (shouldContinue && continuousChatVoiceRef.current) {
-          scheduleNextContinuousRecording();
-        }
-      } finally {
-        isCompletingChatVoiceRef.current = false;
-      }
-    },
-    [
-      addTranscript,
-      chatVoiceSendMode,
-      disableContinuousChatVoice,
-      scheduleNextContinuousRecording,
-      sendChatTurn,
-      stopChatVoiceRecording,
-    ],
-  );
-
-  const stopContinuousChatVoice = useCallback((): void => {
-    const wasEnabled = continuousChatVoiceRef.current;
-    disableContinuousChatVoice();
-
-    if (isChatVoiceRecording) {
-      cancelChatVoiceRecording();
-    }
-
-    if (speechState.isSpeaking) {
-      cancelChatSpeech();
-    }
-
-    if (wasEnabled) {
-      addTranscript("system", "连续语音对话已停止。");
-    }
-  }, [
+  const {
+    isPruningEmptySessions,
+    handleNewSession,
+    handleSessionSwitch,
+    handleSessionRename,
+    handleSessionRemove,
+    handleSessionExport,
+    handlePruneEmptySessions,
+  } = useSessionManagement({
+    dispatch,
     addTranscript,
     cancelChatSpeech,
-    cancelChatVoiceRecording,
-    disableContinuousChatVoice,
-    isChatVoiceRecording,
-    speechState.isSpeaking,
-  ]);
+    sceneMemoryRef,
+    nextEntryIdRef,
+    setRetryableChatTurns,
+    setSpatialAnnotations,
+    activeSessionId: sessionState.activeSessionId,
+    newPersistedSession,
+    switchPersistedSession,
+    renamePersistedSession,
+    removePersistedSession,
+    exportPersistedSession,
+    pruneEmptySessions,
+    restoreSceneMemory,
+  });
 
-  const startContinuousChatVoice = useCallback((): void => {
-    if (
-      !hasMedia ||
-      !transcriptionState.isRecordingSupported ||
-      isChatVoiceBusy ||
-      chatState.isSending
-    ) {
-      return;
-    }
+  // Live cost measurement：新建会话时同步重置 Chat 用量计量。
+  const handleNewSessionWithUsageReset = useCallback(() => {
+    resetChatUsage();
+    handleNewSession();
+  }, [resetChatUsage, handleNewSession]);
 
-    clearContinuousChatRestart();
-    continuousChatVoiceRef.current = true;
-    setIsContinuousChatVoiceEnabled(true);
-    setChatVoiceSendMode("auto-send");
-
-    if (speechState.isSynthesisSupported) {
-      setIsChatAnswerSpeechEnabled(true);
-    }
-
-    const started = startChatVoiceRecording();
-
-    if (!started) {
-      disableContinuousChatVoice();
-      return;
-    }
-
-    addTranscript(
-      "system",
-      speechState.isSynthesisSupported
-        ? "连续语音对话已开启，回答会自动朗读。"
-        : "连续语音对话已开启；当前浏览器不支持自动朗读。",
-    );
-  }, [
-    addTranscript,
-    chatState.isSending,
-    clearContinuousChatRestart,
-    disableContinuousChatVoice,
+  const {
     hasMedia,
+    hasActiveSession,
+    hasRealtimeConnection,
+    isChatMode,
+    isRealtimeMode,
+    isChatVoiceRecording,
+    isChatVoiceTranscribing,
     isChatVoiceBusy,
-    speechState.isSynthesisSupported,
-    startChatVoiceRecording,
-    transcriptionState.isRecordingSupported,
-  ]);
+    activeTurnDetectionMode,
+    activeResponseBudget,
+    isPushToTalkMode,
+  } = resolveWorkspaceDerivedState({
+    mediaStatus: mediaState.status,
+    hasStream: stream !== null,
+    assistantPhase,
+    realtimeStatus: realtimeState.status,
+    providerMode,
+    transcriptionStatus: transcriptionState.status,
+    turnDetectionMode,
+    responseBudget,
+    costPolicyTurnDetectionMode: realtimeState.costPolicy?.turnDetectionMode,
+    costPolicyResponseBudget: realtimeState.costPolicy?.responseBudget,
+  });
+  const retryableEntryIds = useMemo(() => buildRetryableEntryIds(retryableChatTurns), [retryableChatTurns]);
+  // Live cost measurement：按当前模式选择展示的用量报告——Realtime 用权威
+  // `response.done` 计量，Chat 模式用前端估算计量。
+  const displayUsageReport = useMemo(() => {
+    return isChatMode
+      ? chatUsageToUsageReport(chatUsageReport)
+      : usageReport;
+  }, [isChatMode, chatUsageReport, usageReport]);
+  // 成本校准工作台：记录「实际账单金额」对比前端估算（localStorage 持久化）。
+  const {
+    viewModel: calibrationView,
+    addCalibration: handleRecordCalibration,
+    removeCalibration: handleRemoveCalibration,
+    clearCalibrations: handleClearCalibrations,
+  } = useCalibration({
+    isLoaded: sessionState.isLoaded,
+    activeSessionId: sessionState.activeSessionId,
+    currentEstimateUsd: displayUsageReport.estimatedCostUsd,
+  });
+  // 校准偏差自动回写估算单价：由校准样本推导校正系数，可一键回写 / 重置（localStorage 持久化）。
+  const {
+    writeback: calibrationWriteback,
+    applyWriteback: handleApplyCalibrationWriteback,
+    resetWriteback: handleResetCalibrationWriteback,
+  } = useCalibrationWriteback({
+    viewModel: calibrationView,
+    isLoaded: sessionState.isLoaded,
+  });
+  // 仅在「需校准且尚未回写」时展示「自动回写校正估算单价」入口。
+  const showWritebackApply =
+    calibrationView.needsCalibration && !calibrationWriteback.applied;
 
-  const handleContinuousChatVoiceClick = (): void => {
-    if (isContinuousChatVoiceEnabled) {
-      stopContinuousChatVoice();
-      return;
-    }
+  // 已应用的校准回写系数（未回写 → 1，即不校正）。
+  const calibrationFactor =
+    calibrationWriteback.applied && Number.isFinite(calibrationWriteback.factor)
+      ? calibrationWriteback.factor
+      : 1;
 
-    startContinuousChatVoice();
-  };
+  // ②③ 全局累计用量 + 会话级用量导出状态（收敛为 useGlobalUsage hook）。
+  // 会话内 / 全局成本导出应用校准回写系数，使导出成本与实测账单一致。
+  const {
+    globalUsageTotals,
+    globalUsageExport,
+    sessionUsageExport,
+    sessionUsageTrend,
+    budgetUsd,
+    setBudget,
+  } = useGlobalUsage({
+    isLoaded: sessionState.isLoaded,
+    activeSessionId: sessionState.activeSessionId,
+    loadGlobalUsageTotals,
+    restoreUsage,
+    calibrationFactor,
+  });
 
-  useEffect(() => {
-    const videoElement = videoRef.current;
+  // 会话内用量导出：应用校准回写系数，使导出的估算成本与实测账单一致。
+  const usageExport = useMemo(
+    () => buildCalibratedUsageExport(displayUsageReport, calibrationFactor),
+    [displayUsageReport, calibrationFactor],
+  );
 
-    if (videoElement === null) {
-      return;
-    }
+  // 对全局成本视图（护栏 / 驾驶舱 / 预算历史 / 月度外推 / 跨会话对比）应用
+  // 校准回写系数，使侧边栏全局金额与实测账单一致（与 /costs 驾驶舱一致）。
+  const calibratedBudget = useCalibratedCost(
+    {
+      guardrail: budgetGuardrail,
+      monthSpentUsd,
+      monthEndForecast,
+      comparison: sessionComparison,
+      costCockpit,
+      budgetHistory,
+    },
+    calibrationFactor,
+    budgetGuardrail.alertThresholdPct,
+  );
 
-    videoElement.srcObject = stream;
+  // ⑥ 成本告警通知：把护栏 / 月度外推 / 历史审计 / 校准回写折叠为可去重、可忽略的通知。
+  const {
+    notifications: costAlertNotifications,
+    activeCount: costAlertActiveCount,
+    hasFreshAlert: costAlertHasFreshAlert,
+    dismiss: dismissCostAlert,
+    dismissAll: dismissAllCostAlerts,
+  } = useCostAlertNotifications({
+    isLoaded: sessionState.isLoaded,
+    input: {
+      guardrail: calibratedBudget.guardrail,
+      monthEndForecast: calibratedBudget.monthEndForecast,
+      budgetHistory: calibratedBudget.budgetHistory,
+      calibrationWriteback,
+      calibrationNeedsWriteback:
+        calibrationView.needsCalibration && !calibrationWriteback.applied,
+    },
+  });
+  const frameTelemetryStats = useMemo(
+    () => deriveFrameTelemetryStats(frameTelemetry),
+    [frameTelemetry],
+  );
+  const sampleRateStats = useMemo(
+    () => deriveSampleRateStats(frameTelemetry),
+    [frameTelemetry],
+  );
 
-    if (stream !== null) {
-      void videoElement.play().catch(() => undefined);
-    }
-
-    return () => {
-      videoElement.srcObject = null;
-    };
-  }, [stream]);
-
-  useEffect(() => {
-    const audioElement = audioRef.current;
-
-    if (audioElement === null) {
-      return;
-    }
-
-    audioElement.srcObject = remoteStream;
-
-    if (remoteStream !== null) {
-      void audioElement.play().catch(() => undefined);
-    }
-
-    return () => {
-      audioElement.srcObject = null;
-    };
-  }, [remoteStream]);
-
-  useEffect(() => {
-    return () => {
-      continuousChatVoiceRef.current = false;
-      clearContinuousChatRestart();
-    };
-  }, [clearContinuousChatRestart]);
-
-  useEffect(() => {
-    if (!isContinuousChatVoiceEnabled || !isChatMode || !isChatVoiceRecording) {
-      return;
-    }
-
-    const audioTrack = stream?.getAudioTracks()[0];
-
-    if (audioTrack === undefined) {
-      return;
-    }
-
-    let hasDetectedSpeech = false;
-    let silenceStartedAt: number | null = null;
-    let isStopping = false;
-    const recordingStartedAt = Date.now();
-    const AudioContextConstructor = getAudioContextConstructor();
-    let audioContext: AudioContext | null = null;
-    let sourceNode: MediaStreamAudioSourceNode | null = null;
-    let intervalId: number | null = null;
-
-    const stopAfterTurn = (): void => {
-      if (isStopping) {
-        return;
-      }
-
-      isStopping = true;
-      void completeChatVoiceRecording("continuous");
-    };
-
-    const maxRecordingTimeoutId = window.setTimeout(
-      stopAfterTurn,
-      CONTINUOUS_CHAT_MAX_RECORDING_MS,
-    );
-
-    if (AudioContextConstructor !== null) {
-      try {
-        audioContext = new AudioContextConstructor();
-        const audioOnlyStream = new MediaStream([audioTrack]);
-        const analyserNode = audioContext.createAnalyser();
-        analyserNode.fftSize = 1024;
-        sourceNode = audioContext.createMediaStreamSource(audioOnlyStream);
-        sourceNode.connect(analyserNode);
-
-        const samples = new Uint8Array(analyserNode.fftSize);
-        intervalId = window.setInterval(() => {
-          analyserNode.getByteTimeDomainData(samples);
-          const level = calculateAudioRootMeanSquare(samples);
-          const now = Date.now();
-          const elapsedMs = now - recordingStartedAt;
-
-          if (level >= CONTINUOUS_CHAT_SPEECH_THRESHOLD) {
-            hasDetectedSpeech = true;
-            silenceStartedAt = null;
-            return;
-          }
-
-          if (!hasDetectedSpeech || elapsedMs < CONTINUOUS_CHAT_MIN_RECORDING_MS) {
-            return;
-          }
-
-          if (silenceStartedAt === null) {
-            silenceStartedAt = now;
-            return;
-          }
-
-          if (now - silenceStartedAt >= CONTINUOUS_CHAT_SILENCE_MS) {
-            stopAfterTurn();
-          }
-        }, CONTINUOUS_CHAT_AUDIO_LEVEL_POLL_MS);
-      } catch {
-        void audioContext?.close().catch(() => undefined);
-        audioContext = null;
-        sourceNode = null;
-      }
-    }
-
-    return () => {
-      window.clearTimeout(maxRecordingTimeoutId);
-
-      if (intervalId !== null) {
-        window.clearInterval(intervalId);
-      }
-
-      sourceNode?.disconnect();
-      void audioContext?.close().catch(() => undefined);
-    };
-  }, [
-    completeChatVoiceRecording,
-    isChatMode,
-    isChatVoiceRecording,
-    isContinuousChatVoiceEnabled,
-    stream,
-  ]);
-
-  useEffect(() => {
-    if (isContinuousChatVoiceEnabled && (!hasMedia || !isChatMode)) {
-      stopContinuousChatVoice();
-    }
-  }, [
+  const {
+    captureFrameAsync,
+    recordUploadedFrame,
+  } = useFrameCapture({
     hasMedia,
+    videoRef,
+    canvasRef,
+    lastUploadedFrameSignatureRef,
+    dispatch,
+    addTranscript,
+    recordFrameSample: (processMs) => {
+      setFrameTelemetry((prev) => recordFrameTelemetry(prev, processMs));
+    },
+    recordSampleTick: (timestampMs) => {
+      setFrameTelemetry((prev) => recordSampleTick(prev, timestampMs));
+    },
+  });
+
+  const { sendChatTurn } = useSendChatTurn({
+    dispatch,
+    addTranscript,
+    persistMessage,
+    sceneMemoryRef,
+    setSceneMemoryStats,
+    persistSceneMemory,
+    setSpatialAnnotations,
+    sendChatCompletion,
+    responseBudget,
+    recordUploadedFrame,
+    setTranscriptDeliveryStatus,
+    setRetryableChatTurns,
+    isChatAnswerSpeechEnabled,
+    speakChatAnswer,
+    mediaGranted: mediaState.status === "granted",
+    transcript,
+    isTextHistorySummaryEnabled,
+    setTextHistoryStats,
+    onTurnCompleted: recordChatTurn,
+  });
+
+  const { handleTextMessageSubmit, handleRealtimeTurn } = useMessageSend({
+    textDraft,
+    setTextDraft,
     isChatMode,
+    hasMedia,
+    hasRealtimeConnection,
+    assistantPhase,
+    addTranscript,
+    dispatch,
+    sendChatTurn,
+    sendTextMessage,
+    sendVisualContext,
+    captureFrameAsync,
+    recordUploadedFrame,
+  });
+
+  const {
+    handleConversationExport,
+    handleClearConversation,
+    handleRetryChatTurn,
+    handleManualFrameCapture,
+  } = useConversationActions({
+    transcript,
+    retryableChatTurns,
+    isChatSending: chatState.isSending,
+    hasRealtimeConnection,
+    addTranscript,
+    dispatch,
+    cancelChatSpeech,
+    sendChatTurn,
+    setTranscriptDeliveryStatus,
+    setRetryableChatTurns,
+    setSpatialAnnotations,
+    setIsClearConfirmationVisible,
+    nextEntryIdRef,
+    captureFrameAsync,
+    recordUploadedFrame,
+    sendVisualContext,
+  });
+
+  const {
     isContinuousChatVoiceEnabled,
     stopContinuousChatVoice,
-  ]);
-
-  useEffect(() => {
-    if (mediaState.status === "granted") {
-      setAssistantPhase((currentPhase) =>
-        currentPhase === "idle" ? "ready" : currentPhase,
-      );
-      return;
-    }
-
-    if (mediaState.status !== "requesting") {
-      setAssistantPhase((currentPhase) =>
-        currentPhase === "idle" ? currentPhase : "idle",
-      );
-    }
-  }, [mediaState.status]);
-
-  useEffect(() => {
-    if (!isAutoSampling || !hasActiveSession || !hasMedia || !hasRealtimeConnection) {
-      return;
-    }
-
-    // 串行化自动采样：避免上一次未完成时下一次采样返回后按错误顺序
-    // 覆盖基线（旧帧晚回会覆盖新帧基线，导致漏发或重复发）
-    let isCaptureInFlight = false;
-
-    const timerId = window.setInterval(() => {
-      if (isCaptureInFlight) {
-        return;
-      }
-
-      isCaptureInFlight = true;
-      void (async (): Promise<void> => {
-        try {
-          const capturedFrame = await captureFrameAsync("auto");
-
-          if (capturedFrame === null) {
-            return;
-          }
-
-          if (
-            !shouldSendFrame(
-              lastUploadedFrameSignatureRef.current,
-              capturedFrame.signature,
-              FRAME_DIFF_SEND_THRESHOLD,
-            )
-          ) {
-            setSkippedAutoFrameCount((currentCount) => currentCount + 1);
-            return;
-          }
-
-          const sent = sendVisualContext({
-            frameDataUrl: capturedFrame.frameDataUrl,
-            prompt:
-              "这是摄像头的最新画面，请作为后续对话的视觉上下文，不需要主动回应。",
-            requestResponse: false,
-          });
-
-          if (sent) {
-            recordUploadedFrame(capturedFrame.signature);
-          }
-        } finally {
-          isCaptureInFlight = false;
-        }
-      })();
-    }, samplingIntervalSeconds * 1000);
-
-    return () => {
-      window.clearInterval(timerId);
-    };
-  }, [
+    completeChatVoiceRecording,
+    handleContinuousChatVoiceClick,
+  } = useContinuousChatVoice({
+    hasMedia,
+    isChatMode,
+    isChatVoiceRecording,
+    isChatVoiceBusy,
+    chatStateIsSending: chatState.isSending,
+    transcriptionRecordingSupported: transcriptionState.isRecordingSupported,
+    addTranscript,
+    startChatVoiceRecording,
+    stopChatVoiceRecording,
+    cancelChatVoiceRecording,
+    cancelChatSpeech,
+    isSpeaking: speechState.isSpeaking,
+    isSynthesisSupported: speechState.isSynthesisSupported,
     captureFrameAsync,
+    sendChatTurn,
+    chatVoiceSendMode,
+    setChatVoiceSendMode,
+    setIsChatAnswerSpeechEnabled,
+    setTextDraft,
+    setFusionStats,
+  });
+  const {
+    handleAutoSamplingChange,
+    handleFramePruningChange,
+    handleTurnDetectionModeChange,
+    handleResponseBudgetChange,
+    handleResponseModeChange,
+    handleMicrophoneMutedChange,
+    handleChatSpeechInputClick,
+    handleChatVoiceSendModeChange,
+    handleChatAnswerSpeechChange,
+    handleCancelChatSpeech,
+    handleTextDraftChange,
+    handleSamplingIntervalChange,
+    handleTextHistorySummaryChange,
+  } = useWorkspaceControls({
+    isChatVoiceRecording,
+    setAutoSampling: setIsAutoSampling,
+    setFramePruning: setIsFramePruningEnabled,
+    setTurnDetectionMode,
+    setResponseBudget,
+    setResponseMode,
+    setMicrophoneMuted,
+    setChatVoiceSendMode,
+    setChatAnswerSpeechEnabled: setIsChatAnswerSpeechEnabled,
+    setTextDraft,
+    setSamplingIntervalSeconds,
+    setTextHistorySummaryEnabled: setIsTextHistorySummaryEnabled,
+    startChatVoiceRecording,
+    completeChatVoiceRecording,
+    cancelChatSpeech,
+    addTranscript,
+  });
+  const statusLabels = resolveWorkspaceStatusLabels({
+    hasMedia,
+    isChatMode,
+    isContinuousChatVoiceEnabled,
+    isChatVoiceRecording,
+    isChatVoiceTranscribing,
+    isChatSending: chatState.isSending,
+    isSpeaking: speechState.isSpeaking,
+    transcriptionIsRecordingSupported: transcriptionState.isRecordingSupported,
+    transcriptionStatus: transcriptionState.status,
+    transcriptionErrorMessage: transcriptionState.errorMessage ?? null,
+    chatVoiceSendMode,
+    isMicrophoneMuted,
+    isPushToTalkMode,
+    isPushToTalkActive,
+    hasRealtimeConnection,
+    peerConnectionState: realtimeState.peerConnectionState,
+    realtimeStatus: realtimeState.status,
+  });
+  const costControlItems = resolveCostControlItems({
+    providerMode,
+    isChatMode,
+    isAutoSampling,
+    costPolicy: realtimeState.costPolicy
+      ? {
+          visualContextMode: realtimeState.costPolicy.visualContextMode,
+          maxSessionSeconds: realtimeState.costPolicy.maxSessionSeconds,
+          maxResponseOutputTokens: realtimeState.costPolicy.maxResponseOutputTokens,
+        }
+      : null,
+    activeResponseBudget,
+    responseMode,
+    isContinuousChatVoiceEnabled,
+    isChatAnswerSpeechEnabled,
+    transcriptionIsRecordingSupported: transcriptionState.isRecordingSupported,
+    activeTurnDetectionMode,
+    microphoneStatus: statusLabels.microphoneStatus,
+    isMicrophoneMuted,
+  });
+  const {
+    microphoneStatusLabel,
+    chatSpeechStatusLabel,
+    providerDetail,
+    startSessionLabel,
+    pushToTalkLabel,
+    pushToTalkTitle,
+    costControls,
+  } = renderWorkspaceDisplayLabels(t, statusLabels, costControlItems);
+  // 媒体元素绑定：本地流 → video，远端 Realtime 音频流 → audio（卸载时解绑）。
+  useMediaStreamBinding({
+    videoRef,
+    audioRef,
+    stream,
+    remoteStream,
+  });
+
+  // M1.2 连续对话 VAD：监听音频电平，检测用户说完话（或达到最长录音时长）时结束本轮录音。
+  const continuousChatAudioTrack = stream?.getAudioTracks()[0] ?? null;
+  useContinuousChatVad({
+    audioTrack: continuousChatAudioTrack,
+    enabled:
+      isContinuousChatVoiceEnabled && isChatMode && isChatVoiceRecording,
+    onUtteranceComplete: () => {
+      void completeChatVoiceRecording("continuous");
+    },
+  });
+
+  // 媒体相位同步：授权后推进到 ready，撤销时回退到 idle。
+  useMediaPhaseSync({
+    mediaState,
+    assistantPhase,
+    dispatch,
+  });
+
+  useAutoFrameSampling({
+    enabled: isAutoSampling,
     hasActiveSession,
     hasMedia,
     hasRealtimeConnection,
-    isAutoSampling,
+    intervalSeconds: samplingIntervalSeconds,
+    lastUploadedFrameSignatureRef,
+    captureFrameAsync,
     recordUploadedFrame,
     sendVisualContext,
+    onFrameSkipped: () => dispatch({ type: "frame-skipped" }),
+  });
+
+  const { changeProviderMode } = useAssistantSession({
+    hasRealtimeConnection,
+    mediaGranted: mediaState.status === "granted",
+    setProviderMode,
+    dispatch,
+    addTranscript,
+    cleanup: {
+      stopRealtime: stopRealtimeSession,
+      cancelContinuousChatVoice: stopContinuousChatVoice,
+      cancelChatVoiceRecording,
+      cancelChatSpeech,
+    },
+  });
+
+  const { handleStopSession, handleProviderModeChange } = useWorkspaceActions({
+    hasActiveSession,
+    hasRealtimeConnection,
+    mediaGranted: mediaState.status === "granted",
+    providerMode,
+    dispatch,
+    addTranscript,
+    stopRealtimeSession,
+    changeProviderMode,
+  });
+
+  const { handleRequestAccess, handleReleaseMedia } = useMediaAccess({
+    requestAccess,
+    stopAccess,
+    stopContinuousChatVoice,
+    cancelChatVoiceRecording,
+    stopSession: handleStopSession,
+    setAutoSampling: setIsAutoSampling,
+    dispatch,
+    lastUploadedFrameSignatureRef,
+    setMicrophoneMuted,
+    addTranscript,
+  });
+
+  const { handleStartSession } = useSessionStart({
+    isChatMode,
+    mediaGranted: mediaState.status === "granted",
+    dispatch,
+    addTranscript,
+    lastUploadedFrameSignatureRef,
+    isAutoSampling,
+    turnDetectionMode,
+    responseBudget,
+    startRealtimeSession,
+  });
+
+  const {
+    canUseSessionButton,
+    canChangeTurnMode,
+    canChangeProviderMode,
+    canChangeResponseBudget,
+    canVisualQuestion,
+    canSendTextMessage,
+    canToggleChatSpeechInput,
+    canStartContinuousChatVoice,
+    canPushToTalk,
+    canStopSession,
+  } = resolveWorkspaceGating({
+    isChatMode,
+    isRealtimeMode,
+    hasMedia,
+    hasActiveSession,
+    assistantPhase,
+    realtimeStatus: realtimeState.status,
+    hasRealtimeConnection,
+    isProviderConfigLoading,
+    isChatSending: chatState.isSending,
+    isChatVoiceRecording,
+    isChatVoiceTranscribing,
+    isContinuousChatVoiceEnabled,
+    transcriptionIsRecordingSupported:
+      transcriptionState.isRecordingSupported,
+    isPushToTalkMode,
+    isMicrophoneMuted,
+  });
+
+  const {
+    handlePushToTalkPointerDown,
+    handlePushToTalkPointerEnd,
+    handlePushToTalkKeyDown,
+    handlePushToTalkKeyUp,
+  } = usePushToTalkEvents({
+    canPushToTalk,
+    startPushToTalk,
+    stopPushToTalk,
+  });
+
+  const visibleError = resolveVisibleError(
+    mediaState.errorMessage,
+    providerConfigError,
+    realtimeState.errorMessage,
+    transcriptionState.errorMessage,
+    chatState.errorMessage,
+  );
+
+  const {
+    handleWorkspaceResizeStart,
+    handlePanelDragStart,
+    handlePanelDrop,
+  } = useWorkspacePanelInteraction({
+    setSessionWidthPercent,
+    swapPanels,
+  });
+
+  // ── 领域分组 props 组装区 ───────────────────────────────
+  // 把 SessionPanel / VisionColumn 的扁平 props 按领域收拢为分组对象，
+  // 使主组件清晰区分为「逻辑构建区」与下方「展示装配区」（spread 展开）。
+  // 组装逻辑抽为纯函数 `buildWorkspacePanelProps`，便于单测与复用。
+  const { sessionPanelProps, visionColumnProps } = buildWorkspacePanelProps({
+    hasMedia,
+    mediaStatus: mediaState.status,
+    videoRef,
+    audioRef,
+    canvasRef,
+    isMicrophoneMuted,
+    onMicrophoneMutedChange: handleMicrophoneMutedChange,
+    microphoneStatusLabel,
+    assistantPhase,
+    isChatMode,
+    providerMode,
+    realtimeStatus: realtimeState.status,
+    hasRealtimeConnection,
+    isProviderConfigLoading,
+    providerDetail,
+    visionCapability,
+    visibleError,
+    onRequestAccess: handleRequestAccess,
+    onStartSession: handleStartSession,
+    canUseSessionButton,
+    startSessionLabel,
+    canStopSession,
+    onStopSession: handleStopSession,
+    onReleaseMedia: handleReleaseMedia,
+    isPushToTalkActive,
+    canPushToTalk,
+    pushToTalkLabel,
+    pushToTalkTitle,
+    onPushToTalkPointerDown: handlePushToTalkPointerDown,
+    onPushToTalkPointerEnd: handlePushToTalkPointerEnd,
+    onPushToTalkKeyDown: handlePushToTalkKeyDown,
+    onPushToTalkKeyUp: handlePushToTalkKeyUp,
+    canVisualQuestion,
+    onVisualQuestion: handleRealtimeTurn,
+    onManualFrameCapture: handleManualFrameCapture,
+    onPanelDragStart: handlePanelDragStart,
+    onPanelDrop: handlePanelDrop,
+    panelVisibility: layout.panelVisibility,
+    costControls,
+    canChangeProviderMode,
+    onProviderModeChange: handleProviderModeChange,
+    isContinuousChatVoiceEnabled,
+    canStartContinuousChatVoice,
+    onContinuousChatVoiceClick: handleContinuousChatVoiceClick,
+    isChatVoiceRecording,
+    canToggleChatSpeechInput,
+    onChatSpeechInputClick: handleChatSpeechInputClick,
+    isChatVoiceBusy,
+    isChatSending: chatState.isSending,
+    chatVoiceSendMode,
+    onChatVoiceSendModeChange: handleChatVoiceSendModeChange,
+    chatSpeechStatusLabel,
+    canChangeTurnMode,
+    turnDetectionMode,
+    onTurnDetectionModeChange: handleTurnDetectionModeChange,
+    canChangeResponseBudget,
+    responseBudget,
+    onResponseBudgetChange: handleResponseBudgetChange,
+    isChatAnswerSpeechEnabled,
+    isSpeechSynthesisSupported: speechState.isSynthesisSupported,
+    onChatAnswerSpeechChange: handleChatAnswerSpeechChange,
+    isSpeechSpeaking: speechState.isSpeaking,
+    onCancelChatSpeech: handleCancelChatSpeech,
+    responseMode,
+    onResponseModeChange: handleResponseModeChange,
+    isAutoSampling,
+    onAutoSamplingChange: handleAutoSamplingChange,
     samplingIntervalSeconds,
-  ]);
-
-  const handleRequestAccess = (): void => {
-    void requestAccess();
-  };
-
-  const handleReleaseMedia = (): void => {
-    stopContinuousChatVoice();
-    cancelChatVoiceRecording();
-    stopSession();
-    stopAccess();
-    setIsAutoSampling(false);
-    setLastFrameDataUrl(null);
-    lastUploadedFrameSignatureRef.current = null;
-    setSentFrameCount(0);
-    setSkippedAutoFrameCount(0);
-    setMicrophoneMuted(false);
-    addTranscript("system", "已关闭摄像头和麦克风。");
-  };
-
-  const handleProviderModeChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): void => {
-    const nextProviderMode = event.currentTarget.value;
-
-    if (nextProviderMode !== "chat" && nextProviderMode !== "realtime") {
-      return;
-    }
-
-    if (nextProviderMode === providerMode) {
-      return;
-    }
-
-    if (nextProviderMode === "chat" && hasRealtimeConnection) {
-      stopRealtimeSession();
-      setAssistantPhase(mediaState.status === "granted" ? "ready" : "idle");
-      addTranscript(
-        "system",
-        "已切换到 Chat Completions，Realtime 会话已停止。",
-      );
-    }
-
-    if (nextProviderMode === "realtime") {
-      stopContinuousChatVoice();
-      cancelChatVoiceRecording();
-      cancelChatSpeech();
-    }
-
-    setProviderMode(nextProviderMode);
-  };
-
-  const handleStartSession = (): void => {
-    if (isChatMode) {
-      addTranscript(
-        "system",
-        "Chat Completions 模式无需启动 Realtime，会在发送问题时按次请求。",
-      );
-      return;
-    }
-
-    if (mediaState.status !== "granted") {
-      setAssistantPhase("error");
-      addTranscript("system", "请先授权摄像头和麦克风。");
-      return;
-    }
-
-    addTranscript("system", "正在创建 Realtime 会话。");
-    lastUploadedFrameSignatureRef.current = null;
-    setSentFrameCount(0);
-    setSkippedAutoFrameCount(0);
-    void startRealtimeSession({
-      visualContextMode: isAutoSampling ? "interval" : "manual",
-      turnDetectionMode,
-      responseBudget,
-      instructions:
-        "你是一个中文视觉对话助手。请结合摄像头画面和用户语音或文字进行简洁、自然、准确的回应。",
-    });
-  };
-
-  const handleRealtimeTurn = async (): Promise<void> => {
-    const prompt = "请描述你现在看到的画面。";
-
-    if (isChatMode) {
-      if (!hasMedia) {
-        addTranscript("system", "请先授权摄像头后再提问。");
-        return;
-      }
-
-      const capturedFrame = await captureFrameAsync("manual");
-
-      if (capturedFrame === null) {
-        return;
-      }
-
-      const userEntryId = addTranscript("user", prompt, "sent");
-      void sendChatTurn({
-        userEntryId,
-        message: prompt,
-        imageDataUrl: capturedFrame.frameDataUrl,
-        signature: capturedFrame.signature,
-      });
-      return;
-    }
-
-    if (assistantPhase !== "listening" || !hasRealtimeConnection) {
-      return;
-    }
-
-    const capturedFrame = await captureFrameAsync("manual");
-
-    if (capturedFrame === null) {
-      return;
-    }
-
-    addTranscript("user", prompt);
-
-    const sent = sendVisualContext({
-      frameDataUrl: capturedFrame.frameDataUrl,
-      prompt,
-      requestResponse: true,
-    });
-
-    if (sent) {
-      recordUploadedFrame(capturedFrame.signature);
-      addTranscript("system", "已把画面发送给 Realtime 模型。");
-      return;
-    }
-
-    setAssistantPhase("error");
-    addTranscript("system", "Realtime 通道未就绪，画面发送失败。");
-  };
-
-  const handleManualFrameCapture = async (): Promise<void> => {
-    const capturedFrame = await captureFrameAsync("manual");
-
-    if (capturedFrame !== null && hasRealtimeConnection) {
-      const sent = sendVisualContext({
-        frameDataUrl: capturedFrame.frameDataUrl,
-        prompt:
-          "这是用户手动采样的摄像头画面，请作为后续回答的视觉上下文。",
-        requestResponse: false,
-      });
-
-      if (sent) {
-        recordUploadedFrame(capturedFrame.signature);
-        addTranscript("system", "已把当前画面加入 Realtime 上下文。");
-      }
-    }
-  };
-
-  const handleAutoSamplingChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): void => {
-    setIsAutoSampling(event.currentTarget.checked);
-  };
-
-  const handleFramePruningChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): void => {
-    setIsFramePruningEnabled(event.currentTarget.checked);
-  };
-
-  const handleTurnDetectionModeChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): void => {
-    const nextMode = event.currentTarget.value;
-
-    if (nextMode === "server-vad" || nextMode === "push-to-talk") {
-      setTurnDetectionMode(nextMode);
-    }
-  };
-
-  const handleResponseBudgetChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): void => {
-    const nextBudget = event.currentTarget.value;
-
-    if (
-      nextBudget === "brief" ||
-      nextBudget === "standard" ||
-      nextBudget === "detailed"
-    ) {
-      setResponseBudget(nextBudget);
-    }
-  };
-
-  const handleResponseModeChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): void => {
-    setResponseMode(event.currentTarget.checked ? "text-only" : "audio-text");
-  };
-
-  const handleMicrophoneMutedChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): void => {
-    setMicrophoneMuted(event.currentTarget.checked);
-  };
-
-  const handleChatSpeechInputClick = (): void => {
-    if (isChatVoiceRecording) {
-      void completeChatVoiceRecording("manual");
-      return;
-    }
-
-    startChatVoiceRecording();
-  };
-
-  const handleChatVoiceSendModeChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): void => {
-    const nextMode = event.currentTarget.value;
-
-    if (nextMode !== "auto-send" && nextMode !== "review") {
-      return;
-    }
-
-    setChatVoiceSendMode(nextMode);
-  };
-
-  const handleChatAnswerSpeechChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): void => {
-    const nextEnabled = event.currentTarget.checked;
-    setIsChatAnswerSpeechEnabled(nextEnabled);
-
-    if (!nextEnabled) {
-      cancelChatSpeech();
-    }
-  };
-
-  const handleCancelChatSpeech = (): void => {
-    cancelChatSpeech();
-    addTranscript("system", "已停止朗读。");
-  };
-
-  const handleRetryChatTurn = (entryId: string): void => {
-    const retryInput = retryableChatTurns[entryId];
-
-    if (
-      !isChatTurnRetryAllowed(retryInput !== undefined, chatState.isSending) ||
-      retryInput === undefined
-    ) {
-      return;
-    }
-
-    setTranscriptDeliveryStatus(entryId, "sent");
-    void sendChatTurn({ userEntryId: entryId, ...retryInput });
-  };
-
-  const handleConversationExport = (format: "json" | "md"): void => {
-    const exportedAt = Date.now();
-
-    if (format === "json") {
-      downloadTextFile(
-        serializeConversationJson(transcript, exportedAt),
-        "application/json",
-        createConversationExportFilename(exportedAt, "json"),
-      );
-      return;
-    }
-
-    downloadTextFile(
-      serializeConversationMarkdown(transcript, exportedAt),
-      "text/markdown",
-      createConversationExportFilename(exportedAt, "md"),
-    );
-  };
-
-  const handleClearConversation = (): void => {
-    cancelChatSpeech();
-    setTranscript([]);
-    setRetryableChatTurns({});
-    setIsClearConfirmationVisible(false);
-    nextEntryIdRef.current = 0;
-  };
-
-  const handleTextDraftChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): void => {
-    setTextDraft(event.currentTarget.value);
-  };
-
-  const handleTextMessageSubmit = (
-    event: React.FormEvent<HTMLFormElement>,
-  ): void => {
-    event.preventDefault();
-
-    const message = textDraft.trim();
-
-    if (message.length === 0) {
-      return;
-    }
-
-    if (isChatMode) {
-      const userEntryId = addTranscript("user", message, "sent");
-      setTextDraft("");
-      void sendChatTurn({ userEntryId, message });
-      return;
-    }
-
-    if (!hasRealtimeConnection) {
-      addTranscript(
-        "system",
-        "请先启动 Realtime 会话再发送文本。",
-      );
-      return;
-    }
-
-    const sent = sendTextMessage(message);
-
-    if (!sent) {
-      addTranscript("system", "Realtime 通道未就绪，文本发送失败。");
-      return;
-    }
-
-    addTranscript("user", message);
-    setTextDraft("");
-  };
-
-  const handlePushToTalkPointerDown = (
-    event: React.PointerEvent<HTMLButtonElement>,
-  ): void => {
-    if (!canPushToTalk) {
-      return;
-    }
-
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    startPushToTalk();
-  };
-
-  const handlePushToTalkPointerEnd = (
-    event: React.PointerEvent<HTMLButtonElement>,
-  ): void => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-
-    stopPushToTalk();
-  };
-
-  const handlePushToTalkKeyDown = (
-    event: React.KeyboardEvent<HTMLButtonElement>,
-  ): void => {
-    if (
-      event.repeat ||
-      !canPushToTalk ||
-      (event.key !== " " && event.key !== "Enter")
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-    startPushToTalk();
-  };
-
-  const handlePushToTalkKeyUp = (
-    event: React.KeyboardEvent<HTMLButtonElement>,
-  ): void => {
-    if (event.key !== " " && event.key !== "Enter") {
-      return;
-    }
-
-    event.preventDefault();
-    stopPushToTalk();
-  };
-
-  const handleSamplingIntervalChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): void => {
-    setSamplingIntervalSeconds(Number(event.currentTarget.value));
-  };
-
-  const canStartSession =
-    isRealtimeMode &&
-    hasMedia &&
-    !hasActiveSession &&
-    realtimeState.status !== "creating-session" &&
-    realtimeState.status !== "connecting" &&
-    !hasRealtimeConnection;
-  const canUseSessionButton =
-    isChatMode
-      ? !isProviderConfigLoading &&
-        !chatState.isSending &&
-        !isChatVoiceBusy &&
-        !isContinuousChatVoiceEnabled
-      : canStartSession;
-  const canChangeTurnMode =
-    isRealtimeMode &&
-    !hasActiveSession &&
-    realtimeState.status !== "creating-session" &&
-    realtimeState.status !== "connecting" &&
-    !hasRealtimeConnection;
-  const canChangeProviderMode =
-    !isProviderConfigLoading &&
-    !chatState.isSending &&
-    !isChatVoiceBusy &&
-    !isContinuousChatVoiceEnabled &&
-    realtimeState.status !== "creating-session" &&
-    realtimeState.status !== "connecting";
-  const canChangeResponseBudget = isChatMode
-    ? !chatState.isSending && !isChatVoiceBusy && !isContinuousChatVoiceEnabled
-    : canChangeTurnMode;
-  const canRealtimeTurn =
-    isRealtimeMode && assistantPhase === "listening" && hasRealtimeConnection;
-  const canVisualQuestion = isChatMode
-    ? hasMedia &&
-      !chatState.isSending &&
-      !isChatVoiceBusy &&
-      !isContinuousChatVoiceEnabled
-    : canRealtimeTurn;
-  const canSendTextMessage = isChatMode
-    ? !chatState.isSending && !isChatVoiceBusy && !isContinuousChatVoiceEnabled
-    : hasRealtimeConnection;
-  const canToggleChatSpeechInput =
-    isChatMode &&
-    transcriptionState.isRecordingSupported &&
-    hasMedia &&
-    !isContinuousChatVoiceEnabled &&
-    !isChatVoiceTranscribing &&
-    (!chatState.isSending || isChatVoiceRecording);
-  const canStartContinuousChatVoice =
-    isChatMode &&
-    transcriptionState.isRecordingSupported &&
-    hasMedia &&
-    !isContinuousChatVoiceEnabled &&
-    !isChatVoiceBusy &&
-    !chatState.isSending;
-  const canPushToTalk =
-    isRealtimeMode &&
-    assistantPhase === "listening" &&
-    hasRealtimeConnection &&
-    isPushToTalkMode &&
-    !isMicrophoneMuted;
-  const canStopSession =
-    (isRealtimeMode && hasActiveSession) ||
-    hasRealtimeConnection ||
-    realtimeState.status === "creating-session" ||
-    realtimeState.status === "connecting";
-  const visibleError =
-    mediaState.errorMessage ??
-    providerConfigError ??
-    realtimeState.errorMessage ??
-    transcriptionState.errorMessage ??
-    chatState.errorMessage;
-  const providerDetail = isChatMode
-    ? isContinuousChatVoiceEnabled
-      ? "连续语音对话已开启"
-      : isChatVoiceTranscribing
-      ? "正在通过 Worker 转写语音"
-      : chatState.isSending
-        ? "正在通过 HTTP 请求 Chat Completions"
-        : "使用 Chat Completions：无需 Realtime/WebRTC 会话"
-    : hasRealtimeConnection
-      ? "Realtime 连接已建立"
-      : realtimeState.peerConnectionState === null
-        ? "等待 Worker 创建会话"
-        : `连接状态：${realtimeState.peerConnectionState}`;
-  const startSessionLabel =
-    realtimeState.status === "creating-session" ||
-    realtimeState.status === "connecting"
-      ? "连接中"
-      : isChatMode
-        ? "直接提问"
-        : "启动会话";
-  const pushToTalkLabel = isChatMode
-    ? "Realtime 专用"
-    : isPushToTalkActive
-      ? "松开提交"
-      : "按住说话";
-  const pushToTalkTitle = isChatMode
-    ? "按住说话只用于 Realtime 模式；Chat 模式请使用右侧语音输入或键盘输入。"
-    : "按住时发送麦克风音频，松开后提交给 Realtime 模型。";
-
-  const handleWorkspaceResizeStart = (
-    event: React.PointerEvent<HTMLButtonElement>,
-  ): void => {
-    const shell = assistantShellRef.current;
-
-    if (shell === null || window.matchMedia("(max-width: 980px)").matches) {
-      return;
-    }
-
-    event.currentTarget.setPointerCapture(event.pointerId);
-
-    const handlePointerMove = (pointerEvent: PointerEvent): void => {
-      const bounds = shell.getBoundingClientRect();
-      const pointerPercent = ((pointerEvent.clientX - bounds.left) / bounds.width) * 100;
-      const sessionWidthPercent =
-        layout.panelOrder[0] === "session" ? pointerPercent : 100 - pointerPercent;
-      setSessionWidthPercent(sessionWidthPercent);
-    };
-
-    const handlePointerEnd = (): void => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerEnd);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerEnd, { once: true });
-  };
-
-  const handlePanelDragStart = (
-    event: React.DragEvent<HTMLElement>,
-    panel: "session" | "vision",
-  ): void => {
-    if (window.matchMedia("(max-width: 980px)").matches) {
-      event.preventDefault();
-      return;
-    }
-
-    draggedPanelRef.current = panel;
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", panel);
-  };
-
-  const handlePanelDrop = (
-    event: React.DragEvent<HTMLElement>,
-    targetPanel: "session" | "vision",
-  ): void => {
-    event.preventDefault();
-
-    if (draggedPanelRef.current !== null && draggedPanelRef.current !== targetPanel) {
-      swapPanels();
-    }
-
-    draggedPanelRef.current = null;
-  };
+    onSamplingIntervalChange: handleSamplingIntervalChange,
+    isFramePruningEnabled,
+    onFramePruningChange: handleFramePruningChange,
+    isTextHistorySummaryEnabled,
+    onTextHistorySummaryChange: handleTextHistorySummaryChange,
+    usageReport: displayUsageReport,
+    usageExport,
+    sessionUsageExport,
+    sessionUsageTrend,
+    budgetUsd,
+    onBudgetSet: setBudget,
+    skippedAutoFrameCount,
+    sampleWidth: MAX_FRAME_WIDTH,
+    sampleHeight: Math.round(MAX_FRAME_WIDTH * (9 / 16)),
+    transcript,
+    retryableEntryIds,
+    isRetryDisabled: chatState.isSending,
+    onRetry: handleRetryChatTurn,
+    isClearConfirmationVisible,
+    onRequestClear: requestClear,
+    onCancelClear: cancelClear,
+    onConfirmClear: handleClearConversation,
+    onExport: handleConversationExport,
+    textDraft,
+    canSendTextMessage,
+    onTextDraftChange: handleTextDraftChange,
+    onTextMessageSubmit: handleTextMessageSubmit,
+    lastFrameDataUrl,
+    sampledFrameCount,
+    sentFrameCount,
+    prunedFrameCount,
+    spatialAnnotations,
+    sceneMemoryStats,
+    fusionStats,
+    textHistoryStats,
+    frameTelemetryStats,
+    sampleRateStats,
+  });
 
   return (
     <main
@@ -1794,6 +1101,15 @@ export function AssistantWorkspace(): React.JSX.Element {
       data-session-first={layout.panelOrder[0] === "session" ? "true" : "false"}
       style={{ "--session-width": `${layout.sessionWidthPercent}%` } as React.CSSProperties}
     >
+      <div className="ambient-blobs" aria-hidden="true">
+        <div className="ambient-blob ambient-blob--primary" aria-hidden="true" />
+        <div className="ambient-blob ambient-blob--secondary" aria-hidden="true" />
+        <div className="ambient-blob ambient-blob--tertiary" aria-hidden="true" />
+      </div>
+      <div className="ambient-noise" aria-hidden="true" />
+      {/* 桌面原生窗口控制栏（最小化/最大化/关闭）——仅 Tauri 环境显示。 */}
+      <DesktopWindowControls />
+
       <WorkspaceLayoutToolbar
         layout={layout}
         onFocusModeChange={setFocusMode}
@@ -1801,673 +1117,91 @@ export function AssistantWorkspace(): React.JSX.Element {
         onSessionWidthChange={setSessionWidthPercent}
         onSwapPanels={swapPanels}
         onTogglePanel={togglePanel}
+        onToggleSessions={toggleSessionSidebar}
+        themePreference={preference}
+        onThemePreferenceChange={setPreference}
+        terminalEnabled={isDesktop}
+        terminalOpen={isTerminalOpen}
+        onToggleTerminal={handleToggleTerminal}
+        onOpenCommandPalette={() => commandPaletteHostRef.current?.openPalette()}
       />
 
-      <section
-        className="session-column workspace-region"
-        aria-labelledby="assistant-title"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => handlePanelDrop(event, "session")}
-      >
-        <div
-          className="workspace-region-grip"
-          draggable
-          aria-hidden="true"
-          onDragStart={(event) => handlePanelDragStart(event, "session")}
-        >
-          <GripVertical size={17} />
-          拖动控制区
-        </div>
-        <div className="product-header">
-          <div className="brand-mark" aria-hidden="true">
-            <Radio size={25} strokeWidth={2.2} />
-          </div>
-          <div>
-            <p className="eyebrow">AI 视觉对话</p>
-            <h1 id="assistant-title">实时对话助手</h1>
-          </div>
-        </div>
+      <SessionSidebarDrawer
+        open={isSessionSidebarOpen}
+        sessions={sessionState.sessions}
+        activeSessionId={sessionState.activeSessionId}
+        onNew={handleNewSessionWithUsageReset}
+        onSwitch={handleSessionSwitch}
+        onRename={handleSessionRename}
+        onRemove={handleSessionRemove}
+        onExport={handleSessionExport}
+        onPrune={() => void handlePruneEmptySessions()}
+        onClose={closeSessionSidebar}
+        isPruning={isPruningEmptySessions}
+        globalUsageTotals={globalUsageTotals}
+        globalUsageExport={globalUsageExport}
+        budgetGuardrail={calibratedBudget.guardrail}
+        monthSpentUsd={calibratedBudget.monthSpentUsd}
+        monthEndForecast={calibratedBudget.monthEndForecast}
+        onSaveBudget={handleSaveBudget}
+        isSavingBudget={isSavingBudget}
+        sessionUsageTrend={sessionUsageTrend}
+        sessionComparison={calibratedBudget.comparison}
+        costCockpit={calibratedBudget.costCockpit}
+        costCockpitFactor={calibrationFactor}
+        budgetHistory={calibratedBudget.budgetHistory}
+        calibrationView={calibrationView}
+        currentEstimateUsd={displayUsageReport.estimatedCostUsd}
+        calibrationWriteback={calibrationWriteback}
+        showWritebackApply={showWritebackApply}
+        onApplyWriteback={handleApplyCalibrationWriteback}
+        onResetWriteback={handleResetCalibrationWriteback}
+        onRecordCalibration={handleRecordCalibration}
+        onRemoveCalibration={handleRemoveCalibration}
+        onClearCalibration={handleClearCalibrations}
+      />
 
-        <div className="state-panel" aria-label="状态概览">
-          <div className="state-ring" data-phase={assistantPhase}>
-            <span>{phaseLabels[assistantPhase]}</span>
-          </div>
-          <div className="state-copy">
-            <p>媒体</p>
-            <strong>{mediaLabels[mediaState.status]}</strong>
-            <span>{hasMedia ? "摄像头和麦克风已就绪" : "等待授权设备"}</span>
-            <p>连接</p>
-            <strong>
-              {isChatMode
-                ? providerModeLabels[providerMode]
-                : realtimeLabels[realtimeState.status]}
-            </strong>
-            <span>{providerDetail}</span>
-          </div>
-        </div>
-
-        {visibleError ? (
-          <p className="error-banner" role="alert">
-            {visibleError}
-          </p>
-        ) : null}
-
-        {isChatMode && visionCapability === "none" && !isProviderConfigLoading ? (
-          <p className="vision-hint-banner" role="note">
-            当前 Chat 模型不支持视觉输入，画面理解能力未开启。
-            切换到支持视觉的模型（如 Qwen2.5-VL）即可让它"看懂"摄像头画面。
-          </p>
-        ) : null}
-
-        <div className="control-grid" aria-label="主要控制">
-          <button
-            className="control-button primary"
-            type="button"
-            onClick={handleRequestAccess}
-            disabled={mediaState.status === "requesting"}
-          >
-            <Camera size={18} aria-hidden="true" />
-            <span>{hasMedia ? "重新授权" : "授权设备"}</span>
-          </button>
-
-          <button
-            className="control-button"
-            type="button"
-            onClick={handleStartSession}
-            disabled={!canUseSessionButton}
-          >
-            <Play size={18} aria-hidden="true" />
-            <span>{startSessionLabel}</span>
-          </button>
-
-          <button
-            className="control-button ptt"
-            type="button"
-            data-active={isPushToTalkActive ? "true" : "false"}
-            onPointerDown={handlePushToTalkPointerDown}
-            onPointerUp={handlePushToTalkPointerEnd}
-            onPointerCancel={handlePushToTalkPointerEnd}
-            onKeyDown={handlePushToTalkKeyDown}
-            onKeyUp={handlePushToTalkKeyUp}
-            disabled={!canPushToTalk}
-            title={pushToTalkTitle}
-            aria-pressed={isPushToTalkActive}
-          >
-            <Hand size={18} aria-hidden="true" />
-            <span>{pushToTalkLabel}</span>
-          </button>
-
-          <button
-            className="control-button"
-            type="button"
-            onClick={handleRealtimeTurn}
-            disabled={!canVisualQuestion}
-          >
-            <Sparkles size={18} aria-hidden="true" />
-            <span>用画面提问</span>
-          </button>
-
-          <button
-            className="control-button"
-            type="button"
-            onClick={handleManualFrameCapture}
-            disabled={!hasMedia}
-          >
-            <ImageIcon size={18} aria-hidden="true" />
-            <span>采样画面</span>
-          </button>
-
-          <button
-            className="control-button danger"
-            type="button"
-            onClick={stopSession}
-            disabled={!canStopSession}
-          >
-            <CircleStop size={18} aria-hidden="true" />
-            <span>停止会话</span>
-          </button>
-        </div>
-
-        <button
-          className="release-button"
-          type="button"
-          onClick={handleReleaseMedia}
-          disabled={!hasMedia}
-        >
-          <RefreshCcw size={17} aria-hidden="true" />
-          关闭本地设备
-        </button>
-
-        <div
-          className="cost-panel"
-          aria-label="成本与模式"
-          hidden={!layout.panelVisibility.cost}
-        >
-          <div className="panel-heading">
-            <Gauge size={18} aria-hidden="true" />
-            <span>成本控制</span>
-          </div>
-          <dl>
-            {costControls.map((item) => (
-              <div key={item.label}>
-                <dt>{item.label}</dt>
-                <dd>
-                  <strong>{item.value}</strong>
-                  <span>{item.detail}</span>
-                </dd>
-              </div>
-            ))}
-          </dl>
-
-          <div className="provider-controls" aria-label="提供商模式">
-            <fieldset className="mode-segment" disabled={!canChangeProviderMode}>
-              <legend>提供方式</legend>
-              <div>
-                {providerModeOptions.map((option) => (
-                  <label key={option.value}>
-                    <input
-                      type="radio"
-                      name="provider-mode"
-                      value={option.value}
-                      checked={providerMode === option.value}
-                      onChange={handleProviderModeChange}
-                    />
-                    <span>{option.label}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          </div>
-
-          <div className="voice-controls" aria-label="语音设置">
-            {isChatMode ? (
-              <div className="chat-speech-controls" aria-label="Chat 语音输入">
-                <button
-                  className="inline-action-button continuous-voice-button"
-                  type="button"
-                  onClick={handleContinuousChatVoiceClick}
-                  disabled={
-                    !isContinuousChatVoiceEnabled && !canStartContinuousChatVoice
-                  }
-                  aria-pressed={isContinuousChatVoiceEnabled}
-                >
-                  {isContinuousChatVoiceEnabled ? (
-                    <CircleStop size={16} aria-hidden="true" />
-                  ) : (
-                    <Radio size={16} aria-hidden="true" />
-                  )}
-                  <span>
-                    {isContinuousChatVoiceEnabled ? "停止连续" : "连续对话"}
-                  </span>
-                </button>
-                <button
-                  className="inline-action-button"
-                  type="button"
-                  onClick={handleChatSpeechInputClick}
-                  disabled={!canToggleChatSpeechInput}
-                  aria-pressed={isChatVoiceRecording}
-                >
-                  {isChatVoiceRecording ? (
-                    <MicOff size={16} aria-hidden="true" />
-                  ) : (
-                    <Mic size={16} aria-hidden="true" />
-                  )}
-                  <span>{isChatVoiceRecording ? "停止转写" : "单次语音"}</span>
-                </button>
-                <fieldset
-                  className="mode-segment"
-                  disabled={isChatVoiceBusy || chatState.isSending}
-                >
-                  <legend>发送模式</legend>
-                  <div>
-                    {chatVoiceSendModeOptions.map((option) => (
-                      <label key={option.value}>
-                        <input
-                          type="radio"
-                          name="chat-voice-send-mode"
-                          value={option.value}
-                          checked={chatVoiceSendMode === option.value}
-                          onChange={handleChatVoiceSendModeChange}
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-                <span>{chatSpeechStatusLabel}</span>
-              </div>
-            ) : (
-              <>
-                <fieldset className="mode-segment" disabled={!canChangeTurnMode}>
-                  <legend>轮次模式</legend>
-                  <div>
-                    {turnDetectionOptions.map((option) => (
-                      <label key={option.value}>
-                        <input
-                          type="radio"
-                          name="turn-detection-mode"
-                          value={option.value}
-                          checked={turnDetectionMode === option.value}
-                          onChange={handleTurnDetectionModeChange}
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-
-                <label className="toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={isMicrophoneMuted}
-                    onChange={handleMicrophoneMutedChange}
-                    disabled={!hasMedia}
-                  />
-                  <span>{isMicrophoneMuted ? "取消静音" : "静音麦克风"}</span>
-                </label>
-              </>
-            )}
-          </div>
-
-          <div className="response-controls" aria-label="回答设置">
-            <fieldset className="mode-segment" disabled={!canChangeResponseBudget}>
-              <legend>回答长度</legend>
-              <div>
-                {responseBudgetOptions.map((option) => (
-                  <label key={option.value}>
-                    <input
-                      type="radio"
-                      name="response-budget"
-                      value={option.value}
-                      checked={responseBudget === option.value}
-                      onChange={handleResponseBudgetChange}
-                    />
-                    <span>{option.label}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            {isChatMode ? (
-              <>
-                <label className="toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={isChatAnswerSpeechEnabled}
-                    onChange={handleChatAnswerSpeechChange}
-                    disabled={!speechState.isSynthesisSupported}
-                  />
-                  <span>
-                    {isChatAnswerSpeechEnabled
-                      ? "Chat 自动朗读"
-                      : "Chat 不朗读"}
-                  </span>
-                </label>
-
-                <button
-                  className="inline-action-button"
-                  type="button"
-                  onClick={handleCancelChatSpeech}
-                  disabled={!speechState.isSpeaking}
-                >
-                  <Volume2 size={16} aria-hidden="true" />
-                  <span>停止朗读</span>
-                </button>
-              </>
-            ) : (
-              <label className="toggle-row">
-                <input
-                  type="checkbox"
-                  checked={responseMode === "text-only"}
-                  onChange={handleResponseModeChange}
-                />
-                <span>
-                  {responseMode === "text-only"
-                    ? "仅文本回复"
-                    : "语音+文本回复"}
-                </span>
-              </label>
-            )}
-          </div>
-
-          <div className="sampling-controls" aria-label="视觉采样">
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={isAutoSampling}
-                onChange={handleAutoSamplingChange}
-                disabled={!hasMedia}
-              />
-              <span>自动视觉采样</span>
-            </label>
-
-            <label className="range-row">
-              <span>间隔</span>
-              <input
-                type="range"
-                min="5"
-                max="20"
-                step="1"
-                value={samplingIntervalSeconds}
-                onChange={handleSamplingIntervalChange}
-                disabled={!hasMedia || !isAutoSampling}
-              />
-              <strong>{samplingIntervalSeconds} 秒</strong>
-            </label>
-
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={isFramePruningEnabled}
-                onChange={handleFramePruningChange}
-                disabled={isChatMode}
-              />
-              <span>启用已消费帧裁剪</span>
-            </label>
-          </div>
-        </div>
-
-        <div
-          className="usage-panel"
-          aria-label="Realtime 用量"
-          hidden={!layout.panelVisibility.usage}
-        >
-          <div className="usage-heading-row">
-            <div className="panel-heading">
-              <Activity size={18} aria-hidden="true" />
-              <span>用量</span>
-            </div>
-            <div className="usage-export-actions" aria-label="导出用量">
-              <a
-                className="usage-export-button"
-                href={usageExport.jsonDownloadUrl}
-                download={usageExport.jsonFilename}
-              >
-                <Download size={14} aria-hidden="true" />
-                <span>JSON</span>
-              </a>
-              <a
-                className="usage-export-button"
-                href={usageExport.csvDownloadUrl}
-                download={usageExport.csvFilename}
-              >
-                <Download size={14} aria-hidden="true" />
-                <span>CSV</span>
-              </a>
-            </div>
-          </div>
-
-          <dl className="usage-headline">
-            <div>
-              <dt>轮次</dt>
-              <dd>{usageReport.turnCount}</dd>
-            </div>
-            <div>
-              <dt>预估成本</dt>
-              <dd>{formatUsd(usageReport.estimatedCostUsd)}</dd>
-            </div>
-            <div>
-              <dt>最近输入</dt>
-              <dd>
-                {usageReport.lastTurn
-                  ? formatTokens(usageReport.lastTurn.inputTokens)
-                  : "-"}
-              </dd>
-            </div>
-          </dl>
-
-          <dl className="usage-breakdown">
-            <div>
-              <dt>音频输入</dt>
-              <dd>{formatTokens(usageReport.totals.inputAudioTokens)}</dd>
-            </div>
-            <div>
-              <dt>图像输入</dt>
-              <dd>{formatTokens(usageReport.totals.inputImageTokens)}</dd>
-            </div>
-            <div>
-              <dt>文本输入</dt>
-              <dd>{formatTokens(usageReport.totals.inputTextTokens)}</dd>
-            </div>
-            <div>
-              <dt>缓存输入</dt>
-              <dd>{formatTokens(usageReport.totals.cachedInputTokens)}</dd>
-            </div>
-            <div>
-              <dt>音频输出</dt>
-              <dd>{formatTokens(usageReport.totals.outputAudioTokens)}</dd>
-            </div>
-            <div>
-              <dt>文本输出</dt>
-              <dd>{formatTokens(usageReport.totals.outputTextTokens)}</dd>
-            </div>
-          </dl>
-
-          <p className="usage-note">
-            Token 用量来自 Realtime API 返回的 usage 数据；费用只是前端估算，
-            实际账单以服务商后台为准。
-          </p>
-        </div>
-      </section>
+      <SessionPanel {...sessionPanelProps} />
 
       <button
         className="workspace-resize-handle"
         type="button"
-        aria-label="调整工作台区域宽度"
-        title="拖动调整区域宽度"
-        onPointerDown={handleWorkspaceResizeStart}
+        aria-label={t("toolbar.resizeHandle")}
+        title={t("toolbar.resizeTitle")}
+        onPointerDown={(event) =>
+          handleWorkspaceResizeStart(event, assistantShellRef.current, layout.panelOrder)
+        }
       >
         <GripVertical size={18} aria-hidden="true" />
       </button>
 
-      <section
-        className="vision-column workspace-region"
-        aria-labelledby="vision-title"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => handlePanelDrop(event, "vision")}
-      >
-        <div
-          className="workspace-region-grip workspace-region-grip-dark"
-          draggable
-          aria-hidden="true"
-          onDragStart={(event) => handlePanelDragStart(event, "vision")}
-        >
-          <GripVertical size={17} />
-          拖动画面区
-        </div>
-        <div className="camera-stage">
-          <video
-            ref={videoRef}
-            className="camera-preview"
-            autoPlay
-            muted
-            playsInline
-            aria-label="摄像头预览"
-          />
-          <audio
-            ref={audioRef}
-            className="remote-audio"
-            autoPlay
-            aria-label="AI 回复音频"
-          />
+      <VisionColumn {...visionColumnProps} />
 
-          {!hasMedia ? (
-            <div className="camera-empty">
-              <Video size={34} aria-hidden="true" />
-              <h2 id="vision-title">等待视觉输入</h2>
-              <p>授权摄像头后，这里会显示实时画面。</p>
-            </div>
-          ) : null}
+      {/* ⑥ 成本告警通知中心（铃铛 + 一次性横幅）。 */}
+      <CostAlertCenter
+        notifications={costAlertNotifications}
+        activeCount={costAlertActiveCount}
+        showBanner={costAlertHasFreshAlert}
+        onDismiss={dismissCostAlert}
+        onDismissAll={dismissAllCostAlerts}
+      />
 
-          <div className="camera-hud" aria-label="媒体状态">
-            <span>
-              <Camera size={15} aria-hidden="true" />
-              {hasMedia ? "视频已开启" : "视频未开启"}
-            </span>
-            <span>
-              {isMicrophoneMuted ? (
-                <MicOff size={15} aria-hidden="true" />
-              ) : (
-                <Mic size={15} aria-hidden="true" />
-              )}
-              {microphoneStatusLabel}
-            </span>
-          </div>
+      {/* 全局命令面板 + 快捷键 + 桌面通知（Cmd+K / 快捷键配置）。 */}
+      <GlobalShortcutHost
+        ref={commandPaletteHostRef}
+        scope="home"
+        commands={commandPaletteCommands}
+        terminalEnabled={isDesktop}
+        onToggleTerminal={handleToggleTerminal}
+        onToggleSessions={toggleSessionSidebar}
+        onToggleConsole={() => togglePanel("cost")}
+        onNewSession={handleNewSessionWithUsageReset}
+      />
 
-          <div className="audio-meter" aria-hidden="true" data-active={assistantPhase}>
-            <span />
-            <span />
-            <span />
-            <span />
-            <span />
-          </div>
-        </div>
-
-        <div className="dialogue-board" aria-label="对话记录">
-          <div className="dialogue-heading-row">
-            <div className="panel-heading">
-              <Volume2 size={18} aria-hidden="true" />
-              <span>对话</span>
-            </div>
-            <div className="conversation-actions" aria-label="对话操作">
-              <button
-                type="button"
-                onClick={() => handleConversationExport("md")}
-                disabled={transcript.length === 0}
-                title="导出 Markdown"
-                aria-label="导出 Markdown 对话记录"
-              >
-                <FileText size={15} aria-hidden="true" />
-                <span>MD</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleConversationExport("json")}
-                disabled={transcript.length === 0}
-                title="导出 JSON"
-                aria-label="导出 JSON 对话记录"
-              >
-                <FileJson size={15} aria-hidden="true" />
-                <span>JSON</span>
-              </button>
-              {isClearConfirmationVisible ? (
-                <div className="conversation-clear-confirm" role="group" aria-label="确认清空对话">
-                  <span>确认清空？</span>
-                  <button type="button" onClick={handleClearConversation}>
-                    确认
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsClearConfirmationVisible(false)}
-                  >
-                    取消
-                  </button>
-                </div>
-              ) : (
-                <button
-                  className="conversation-clear-button"
-                  type="button"
-                  onClick={() => setIsClearConfirmationVisible(true)}
-                  disabled={transcript.length === 0}
-                  title="清空对话"
-                  aria-label="清空对话记录"
-                >
-                  <Trash2 size={15} aria-hidden="true" />
-                  <span>清空</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          <TranscriptList
-            entries={transcript}
-            isRetryDisabled={chatState.isSending}
-            retryableEntryIds={retryableEntryIds}
-            onRetry={handleRetryChatTurn}
-          />
-
-          <form
-            className="text-composer"
-            onSubmit={handleTextMessageSubmit}
-            aria-label="文本输入"
-          >
-            <input
-              type="text"
-              value={textDraft}
-              onChange={handleTextDraftChange}
-              placeholder={
-                isChatMode
-                  ? "输入问题，发送到 Chat Completions"
-                  : hasRealtimeConnection
-                  ? "输入文字发送给 Realtime"
-                  : "启动会话后可输入文字"
-              }
-              disabled={!canSendTextMessage}
-              aria-label="文本消息内容"
-            />
-            <button
-              type="submit"
-              disabled={!canSendTextMessage || textDraft.trim().length === 0}
-              aria-label="发送文本消息"
-            >
-              <Send size={16} aria-hidden="true" />
-              <span>{chatState.isSending ? "发送中" : "发送"}</span>
-            </button>
-          </form>
-        </div>
-
-        <div
-          className="visual-context-panel"
-          aria-label="视觉上下文"
-          hidden={!layout.panelVisibility.visualContext}
-        >
-          <div className="panel-heading">
-            <ImageIcon size={18} aria-hidden="true" />
-            <span>最近画面</span>
-          </div>
-
-          <div className="frame-sample">
-            {lastFrameDataUrl ? (
-              <img src={lastFrameDataUrl} alt="最近采样画面" />
-            ) : (
-              <div className="frame-placeholder">
-                <ImageIcon size={22} aria-hidden="true" />
-                <span>暂无采样画面</span>
-              </div>
-            )}
-          </div>
-
-          <dl className="frame-stats">
-            <div>
-              <dt>采样</dt>
-              <dd>{sampledFrameCount}</dd>
-            </div>
-            <div>
-              <dt>已发送</dt>
-              <dd>{sentFrameCount}</dd>
-            </div>
-            <div>
-              <dt>已跳过</dt>
-              <dd>{skippedAutoFrameCount}</dd>
-            </div>
-            <div>
-              <dt>已裁剪</dt>
-              <dd>{prunedFrameCount}</dd>
-            </div>
-            <div>
-              <dt>间隔</dt>
-              <dd>{isAutoSampling ? `${samplingIntervalSeconds} 秒` : "手动"}</dd>
-            </div>
-          </dl>
-        </div>
-
-        <aside className="security-strip" aria-label="安全说明">
-          <ShieldCheck size={18} aria-hidden="true" />
-          <span>密钥只在 Worker 端使用，浏览器不会暴露永久 API Key。</span>
-        </aside>
-
-        <canvas ref={canvasRef} className="capture-canvas" aria-hidden="true" />
-      </section>
+      {/* 内置桌面终端（xterm.js）——仅 Tauri 环境可用。 */}
+      {isDesktop ? (
+        <TerminalPanel open={isTerminalOpen} onToggle={handleToggleTerminal} />
+      ) : null}
     </main>
   );
 }

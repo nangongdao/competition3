@@ -213,10 +213,16 @@ The final demo package is documented in
 * Chat Completions mode needs `OPENAI_CHAT_MODEL`; use a model that supports
   image input if testing camera-frame understanding, or set
   `OPENAI_CHAT_VISION_INPUT=disabled` for text-only chat models.
-* Circuit state is operationally visible through structured transition logs,
-  but there is not yet a read-only breaker health/admin endpoint. The Worker
-  deliberately fails open if the Durable Object binding cannot be reached so
-  a control-plane fault does not become a complete provider outage.
+* **Circuit breaker health endpoint (implemented)**: `GET /api/circuit`
+  exposes a read-only snapshot of every configured breaker shard
+  (chat / realtime / transcription), including `mode`, `consecutiveFailures`,
+  `openUntil`, `generation`, `probeInFlight`, and the derived `isOpen` and
+  `retryAfterMs`. It reads state without mutating it (the Durable Object
+  `snapshot()` RPC never writes), so operators can poll it for monitoring and
+  alerts. The Worker deliberately fails open if the Durable Object binding
+  cannot be reached (the endpoint returns a 503 degraded payload instead of
+  crashing), so a control-plane fault does not become a complete provider
+  outage.
 * Chat-mode speech input depends on browser `MediaRecorder` support and a
   provider/model that supports `/audio/transcriptions` or the configured
   equivalent. Spoken answer playback still depends on browser speech synthesis

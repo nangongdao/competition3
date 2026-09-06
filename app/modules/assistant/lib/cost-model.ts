@@ -385,6 +385,58 @@ export function formatUsd(amount: number): string {
   return `$${amount.toFixed(4)}`;
 }
 
+/**
+ * 成本换算的实际账单来源标注。
+ *
+ * 用量面板展示的「估算成本」本质上是把 token 用量按某套单价换算成 USD，
+ * 而 token 用量的来源（Realtime `response.done` 权威载荷 vs Chat 前端估算）
+ * 与所用单价集决定了这笔换算的可信度。此类型把两者编码为可展示的标注，
+ * 用于对用户动态说明「成本依据哪个来源、是否为权威计量」，并给出
+ * provider 账单核对提示（真实账单以 provider 控制台为准）。
+ */
+export type BillSource =
+  | {
+      kind: "realtime-response-done";
+      /** token 用量来自 Realtime `response.done` usage 载荷，属权威计量。 */
+      usageAuthority: "authoritative";
+      /** 单价基于 gpt-realtime 定价集。 */
+      priceSet: "gpt-realtime-pricing";
+      /** 供 i18n 使用的标注 key 前缀。 */
+      key: "realtime";
+    }
+  | {
+      kind: "chat-frontend-estimate";
+      /** token 用量为前端按输入/输出文本与图像平铺规则估算，非权威。 */
+      usageAuthority: "estimated";
+      /** 单价基于 Chat Completions 定价集。 */
+      priceSet: "chat-pricing";
+      /** 供 i18n 使用的标注 key 前缀。 */
+      key: "chat";
+    };
+
+/**
+ * 根据 provider 模式映射出成本换算的账单来源标注。
+ *
+ * @param isChatMode 是否为 Chat 模式（用量为前端估算）。false 视为
+ *   Realtime 模式（用量来自 `response.done` 权威载荷）。
+ * @returns 账单来源标注；未知模式回退为 Chat 估算。
+ */
+export function describeBillSource(isChatMode: boolean): BillSource {
+  return isChatMode
+    ? {
+        kind: "chat-frontend-estimate",
+        usageAuthority: "estimated",
+        priceSet: "chat-pricing",
+        key: "chat",
+      }
+    : {
+        kind: "realtime-response-done",
+        usageAuthority: "authoritative",
+        priceSet: "gpt-realtime-pricing",
+        key: "realtime",
+      };
+}
+
 /** 视觉 token 计算参数（OpenAI 兼容规范）。 */
 const VISION_BASE_TOKENS = 85;
 const VISION_TILE_TOKENS = 170;
@@ -455,4 +507,30 @@ export function formatTokens(count: number): string {
   }
 
   return String(count);
+}
+
+/**
+ * 估算被自动跳过的帧在未跳转情况下会产生的图像 input token 成本。
+ *
+ * 用于把"跳过 N 帧"翻译为可感知的"≈节省 ¥X.XX"，强化用户对成本节省的体感。
+ *
+ * @param skippedFrameCount 已自动跳过的帧数
+ * @param width 采样帧宽度（像素）
+ * @param height 采样帧高度（像素）
+ * @returns 估算的节省金额（USD）
+ */
+export function estimateSkippedFramesSavings(
+  skippedFrameCount: number,
+  width: number,
+  height: number,
+): number {
+  if (!Number.isFinite(skippedFrameCount) || skippedFrameCount <= 0) {
+    return 0;
+  }
+
+  const tokensPerFrame = estimateImageTokens(width, height);
+  const pricePerToken =
+    REALTIME_PRICES_USD_PER_MILLION.inputImage / 1_000_000;
+
+  return skippedFrameCount * tokensPerFrame * pricePerToken;
 }

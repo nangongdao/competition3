@@ -120,4 +120,43 @@ describe("UpstreamCircuitBreaker Workers runtime integration", () => {
     expect(storedState.open_until).toBe(0);
     expect(storedState.probe_in_flight).toBe(0);
   });
+
+  it("snapshot() is read-only and reports open state without mutating it", async () => {
+    const stub = getCircuitNamespace().getByName("runtime-snapshot-test");
+
+    // 打开熔断：3 次连续失败
+    for (let failure = 0; failure < 3; failure += 1) {
+      const permit = await stub.acquire();
+      expect(permit.allowed).toBe(true);
+      if (!permit.allowed) {
+        throw new Error("Expected a closed-circuit permit.");
+      }
+      await stub.recordFailure(permit.generation);
+    }
+
+    const storedBefore = await readStoredState(stub);
+    const snapshot = await stub.snapshot();
+
+    expect(snapshot.mode).toBe("open");
+    expect(snapshot.consecutiveFailures).toBe(3);
+    expect(snapshot.isOpen).toBe(true);
+    expect(snapshot.retryAfterMs).toBeGreaterThan(0);
+
+    // 只读：调用 snapshot 后存储态必须不变
+    const storedAfter = await readStoredState(stub);
+    expect(storedAfter).toEqual(storedBefore);
+  });
+
+  it("snapshot() reports closed state for a never-failed circuit", async () => {
+    const stub = getCircuitNamespace().getByName("runtime-snapshot-closed-test");
+
+    const snapshot = await stub.snapshot();
+
+    expect(snapshot).toMatchObject({
+      mode: "closed",
+      consecutiveFailures: 0,
+      isOpen: false,
+      retryAfterMs: 0,
+    });
+  });
 });

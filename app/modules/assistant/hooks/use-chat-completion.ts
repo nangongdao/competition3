@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { withClientAccessToken } from "@/modules/assistant/lib/api-client";
+import { createSseParser } from "@/modules/assistant/lib/sse-parser";
 import { isRecord } from "@/modules/assistant/lib/type-guards";
 import type {
   ChatApiErrorResponse,
@@ -10,8 +11,13 @@ import type {
 
 type SendChatCompletionInput = Pick<
   ChatCompletionInput,
-  "message" | "imageDataUrl" | "responseBudget" | "instructions"
+  "message" | "imageDataUrl" | "responseBudget" | "instructions" | "sceneContext" | "historyContext"
 >;
+
+type SendChatCompletionOptions = {
+  /** 流式输出：每次收到增量内容时调用。传入后走 SSE 流式路径。 */
+  onDelta?: (delta: string) => void;
+};
 
 type ChatCompletionState = {
   isSending: boolean;
@@ -22,6 +28,7 @@ type UseChatCompletionResult = {
   chatState: ChatCompletionState;
   sendChatCompletion: (
     input: SendChatCompletionInput,
+    options?: SendChatCompletionOptions,
   ) => Promise<ChatCompletionSuccessResponse | null>;
 };
 
@@ -34,6 +41,37 @@ function isChatCompletionSuccessResponse(
     typeof value.answer === "string" &&
     typeof value.model === "string"
   );
+}
+
+/**
+ * Picks the optional `usage` object out of a non-streaming Chat response.
+ * Returns `undefined` when absent or malformed so metering can fall back to
+ * the front-end token estimate.
+ */
+function readChatUsage(value: Record<string, unknown>): ChatCompletionSuccessResponse["usage"] {
+  const usage = value.usage;
+
+  if (!isRecord(usage)) {
+    return undefined;
+  }
+
+  const promptTokens = usage.prompt_tokens;
+  const completionTokens = usage.completion_tokens;
+  const totalTokens = usage.total_tokens;
+
+  if (
+    typeof promptTokens !== "number" ||
+    typeof completionTokens !== "number" ||
+    typeof totalTokens !== "number"
+  ) {
+    return undefined;
+  }
+
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+  };
 }
 
 function isChatApiErrorResponse(value: unknown): value is ChatApiErrorResponse {
@@ -68,6 +106,10 @@ function getLocalizedApiErrorMessage(errorResponse: ChatApiErrorResponse): strin
 
   if (errorResponse.code === "chat_completion_rate_limited") {
     return "Chat Completions 服务当前请求过多，请稍后重试。";
+  }
+
+  if (errorResponse.code === "chat_stream_failed") {
+    return "Chat Completions 服务返回的流式响应异常。";
   }
 
   if (
@@ -119,7 +161,99 @@ async function readChatSuccess(
     throw new Error("Chat Completions 返回格式不符合预期。");
   }
 
-  return value;
+  // 非流式响应：透传上游权威 `usage`（若提供），供计量替代估算。
+  const usage = readChatUsage(value as Record<string, unknown>);
+
+  return usage === undefined ? value : { ...value, usage };
+}
+
+async function consumeChatStream(
+  response: Response,
+  onDelta: (delta: string) => void,
+): Promise<{ answer: string; model?: string }> {
+  if (response.body === null) {
+    throw new Error("Chat Completions 流式响应没有可读取的 body。");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const parser = createSseParser();
+  let answer = "";
+  let model: string | undefined;
+  let finished = false;
+  let sawDelta = false;
+  let rawText = "";
+
+  while (!finished) {
+    const result = await reader.read();
+
+    if (result.done) {
+      break;
+    }
+
+    const decoded = decoder.decode(result.value, { stream: true });
+    rawText += decoded;
+
+    for (const event of parser.push(decoded)) {
+      if (event.done) {
+        finished = true;
+        break;
+      }
+
+      const data = event.data;
+
+      if (!isRecord(data) || data.success !== true) {
+        continue;
+      }
+
+      if (typeof data.delta === "string" && data.delta.length > 0) {
+        answer += data.delta;
+        sawDelta = true;
+        onDelta(data.delta);
+      }
+
+      if (typeof data.model === "string" && data.model.trim().length > 0) {
+        model = data.model.trim();
+      }
+    }
+  }
+
+  // 兜底：若上游忽略 stream 标志而返回普通 JSON，尝试从缓存文本中提取完整答案。
+  if (!sawDelta) {
+    const fallback = readChatSuccessFallbackFromText(rawText);
+
+    if (fallback !== null) {
+      return fallback;
+    }
+  }
+
+  return { answer, model };
+}
+
+/**
+ * 当流式路径未产生任何增量时，尝试把缓存的上游文本作为普通 JSON 读取并提取答案。
+ * 覆盖“上游忽略 stream:true 但返回完整 choices”的兼容场景。
+ */
+function readChatSuccessFallbackFromText(
+  text: string,
+): ChatCompletionSuccessResponse | null {
+  if (text.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const value = JSON.parse(text) as unknown;
+
+    if (!isChatCompletionSuccessResponse(value)) {
+      return null;
+    }
+
+    const usage = readChatUsage(value as Record<string, unknown>);
+
+    return usage === undefined ? value : { ...value, usage };
+  } catch {
+    return null;
+  }
 }
 
 export function useChatCompletion(): UseChatCompletionResult {
@@ -130,11 +264,13 @@ export function useChatCompletion(): UseChatCompletionResult {
   const sendChatCompletion = useCallback(
     async (
       input: SendChatCompletionInput,
+      options?: SendChatCompletionOptions,
     ): Promise<ChatCompletionSuccessResponse | null> => {
+      const wantsStream = options?.onDelta !== undefined;
       setChatState({ isSending: true });
 
       try {
-        const requestBody: SendChatCompletionInput = {
+        const requestBody: SendChatCompletionInput & { stream?: boolean } = {
           message: input.message,
           responseBudget: input.responseBudget,
         };
@@ -145,6 +281,18 @@ export function useChatCompletion(): UseChatCompletionResult {
 
         if (input.instructions !== undefined) {
           requestBody.instructions = input.instructions;
+        }
+
+        if (input.sceneContext !== undefined) {
+          requestBody.sceneContext = input.sceneContext;
+        }
+
+        if (input.historyContext !== undefined) {
+          requestBody.historyContext = input.historyContext;
+        }
+
+        if (wantsStream) {
+          requestBody.stream = true;
         }
 
         const response = await fetch(
@@ -160,6 +308,24 @@ export function useChatCompletion(): UseChatCompletionResult {
 
         if (!response.ok) {
           throw new Error(await readChatError(response));
+        }
+
+        if (wantsStream) {
+          const onDelta = options?.onDelta;
+
+          if (onDelta === undefined) {
+            throw new Error("Chat Completions 流式回调缺失。");
+          }
+
+          const { answer, model } = await consumeChatStream(response, onDelta);
+          const successResponse: ChatCompletionSuccessResponse = {
+            success: true,
+            answer,
+            model: model ?? "",
+          };
+
+          setChatState({ isSending: false });
+          return successResponse;
         }
 
         const value = await readChatSuccess(response);

@@ -2,17 +2,21 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 
+import { streamSSE } from "hono/streaming";
+
 import {
   executeUpstreamRequest,
   UpstreamRequestError,
 } from "../../lib/upstream/resilience";
 import { readJsonResponseBounded } from "../../lib/upstream/response";
+import { createChatStreamParser } from "../../lib/chat-stream";
 import type { AppEnv } from "../../types";
 import {
   chatCompletionInputSchema,
   type ChatApiErrorResponse,
   type ChatCompletionSuccessResponse,
   type ChatResponseBudget,
+  type ChatUsage,
 } from "./types";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
@@ -59,6 +63,7 @@ type ChatCompletionPayload = {
   messages: ChatMessage[];
   max_tokens?: number;
   max_completion_tokens?: number;
+  stream?: boolean;
 };
 
 type ChatTokenLimitParameter =
@@ -107,6 +112,7 @@ chatRoutes.post("/completion", async (c) => {
   }
 
   const input = parseResult.data;
+  const wantsStream = input.stream === true;
   const payload = buildChatCompletionPayload({
     model: providerConfig.model,
     instructions: input.instructions,
@@ -114,7 +120,10 @@ chatRoutes.post("/completion", async (c) => {
     message: input.message,
     imageDataUrl:
       providerConfig.visionInput === "enabled" ? input.imageDataUrl : undefined,
+    sceneContext: input.sceneContext,
+    historyContext: input.historyContext,
     tokenLimitParameter: providerConfig.tokenLimitParameter,
+    stream: wantsStream,
   });
 
   let upstreamResponse: Response;
@@ -152,6 +161,10 @@ chatRoutes.post("/completion", async (c) => {
     ), 502);
   }
 
+  if (wantsStream) {
+    return streamChatCompletion(c, upstreamResponse);
+  }
+
   const upstreamBody = await readJsonResponseBounded(upstreamResponse);
 
   const answer = getChatAnswer(upstreamBody.value);
@@ -163,10 +176,15 @@ chatRoutes.post("/completion", async (c) => {
     ), 502);
   }
 
+  const model = getResponseModel(upstreamBody.value) ?? providerConfig.model;
+  const usage = getChatUsage(upstreamBody.value);
+
+  // 非流式响应：若上游带 `usage` 字段则透传到前端，供权威计量替代估算。
   const response: ChatCompletionSuccessResponse = {
     success: true,
     answer,
-    model: getResponseModel(upstreamBody.value) ?? providerConfig.model,
+    model,
+    ...(usage === null ? {} : { usage }),
   };
 
   return c.json(response);
@@ -178,6 +196,74 @@ function createErrorResponse(error: string, code: string): ChatApiErrorResponse 
     error,
     code,
   };
+}
+
+async function streamChatCompletion(
+  c: Context<AppEnv>,
+  upstreamResponse: Response,
+): Promise<Response> {
+  if (upstreamResponse.body === null) {
+    return c.json(createErrorResponse(
+      "Chat Completions provider returned an empty stream.",
+      "chat_stream_failed",
+    ), 502);
+  }
+
+  const reader = upstreamResponse.body.getReader();
+  const decoder = new TextDecoder();
+  const parser = createChatStreamParser();
+  let model: string | undefined;
+
+  return streamSSE(c, async (stream) => {
+    try {
+      while (true) {
+        const result = await reader.read();
+
+        if (result.done) {
+          break;
+        }
+
+        const events = parser.push(decoder.decode(result.value, { stream: true }));
+
+        for (const event of events) {
+          if (event.done) {
+            break;
+          }
+
+          if (event.model !== undefined) {
+            model = event.model;
+          }
+
+          if (event.delta.length > 0) {
+            await stream.writeSSE({
+              data: JSON.stringify({ success: true, delta: event.delta }),
+            });
+          }
+        }
+      }
+
+      await stream.writeSSE({
+        data: JSON.stringify({ success: true, done: true, ...(model === undefined ? {} : { model }) }),
+      });
+    } catch (error: unknown) {
+      if (c.req.raw.signal.aborted) {
+        await reader.cancel();
+        return;
+      }
+
+      await reader.cancel();
+
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw error;
+      }
+    } finally {
+      try {
+        await reader.cancel();
+      } catch {
+        // reader 已关闭
+      }
+    }
+  });
 }
 
 function resolveChatProviderConfig(
@@ -287,7 +373,10 @@ function buildChatCompletionPayload(input: {
   responseBudget: ChatResponseBudget;
   message: string;
   imageDataUrl: string | undefined;
+  sceneContext: string | undefined;
+  historyContext: string | undefined;
   tokenLimitParameter: ChatTokenLimitParameter;
+  stream: boolean;
 }): ChatCompletionPayload {
   const payload: ChatCompletionPayload = {
     model: input.model,
@@ -298,7 +387,12 @@ function buildChatCompletionPayload(input: {
       },
       {
         role: "user",
-        content: buildUserContent(input.message, input.imageDataUrl),
+        content: buildUserContent(
+          input.message,
+          input.imageDataUrl,
+          input.sceneContext,
+          input.historyContext,
+        ),
       },
     ],
   };
@@ -312,21 +406,40 @@ function buildChatCompletionPayload(input: {
     payload.max_completion_tokens = outputTokenLimit;
   }
 
+  if (input.stream) {
+    payload.stream = true;
+  }
+
   return payload;
 }
 
 function buildUserContent(
   message: string,
   imageDataUrl: string | undefined,
+  sceneContext: string | undefined,
+  historyContext: string | undefined,
 ): ChatMessage["content"] {
+  // 场景记忆 + 文本历史摘要：历史上下文（帧摘要 + 更早对话摘要）注入为文本部分。
+  const contexts: string[] = [];
+  if (sceneContext !== undefined && sceneContext.length > 0) {
+    contexts.push(sceneContext);
+  }
+  if (historyContext !== undefined && historyContext.length > 0) {
+    contexts.push(historyContext);
+  }
+  const contextualizedMessage =
+    contexts.length > 0
+      ? `${message}\n\n${contexts.join("\n\n")}`
+      : message;
+
   if (imageDataUrl === undefined) {
-    return message;
+    return contextualizedMessage;
   }
 
   return [
     {
       type: "text",
-      text: message,
+      text: contextualizedMessage,
     },
     {
       type: "image_url",
@@ -439,4 +552,52 @@ function getResponseModel(value: unknown): string | null {
   return typeof value.model === "string" && value.model.trim().length > 0
     ? value.model
     : null;
+}
+
+function readTokenCount(value: Record<string, unknown>, fieldName: string): number | null {
+  const fieldValue = value[fieldName];
+
+  if (typeof fieldValue !== "number" || !Number.isFinite(fieldValue) || fieldValue < 0) {
+    return null;
+  }
+
+  return fieldValue;
+}
+
+/**
+ * Extracts the `usage` object from a non-streaming Chat Completions response.
+ * Returns `null` when the payload carries no usable usage (streaming responses
+ * typically omit it). Individual missing counts fall back to the sum or 0 so
+ * partial payloads still produce a usable usage object.
+ */
+function getChatUsage(value: unknown): ChatUsage | null {
+  if (typeof value !== "object" || value === null || !("usage" in value)) {
+    return null;
+  }
+
+  const usageValue = value.usage;
+
+  if (typeof usageValue !== "object" || usageValue === null) {
+    return null;
+  }
+
+  const usageRecord = usageValue as Record<string, unknown>;
+  const promptTokens = readTokenCount(usageRecord, "prompt_tokens");
+  const completionTokens = readTokenCount(usageRecord, "completion_tokens");
+  const totalTokens = readTokenCount(usageRecord, "total_tokens");
+
+  if (promptTokens === null && completionTokens === null && totalTokens === null) {
+    return null;
+  }
+
+  const resolvedPrompt = promptTokens ?? 0;
+  const resolvedCompletion = completionTokens ?? 0;
+  const resolvedTotal =
+    totalTokens ?? resolvedPrompt + resolvedCompletion;
+
+  return {
+    promptTokens: resolvedPrompt,
+    completionTokens: resolvedCompletion,
+    totalTokens: resolvedTotal,
+  };
 }

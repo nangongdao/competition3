@@ -1,10 +1,14 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, Copy, History, RefreshCcw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   getNextTranscriptVisibleCount,
   getVisibleTranscriptEntries,
+  TRANSCRIPT_ESTIMATED_ROW_SIZE,
   TRANSCRIPT_INITIAL_WINDOW_SIZE,
+  TRANSCRIPT_VIRTUAL_OVERSCAN,
 } from "@/modules/assistant/lib/conversation";
 import type {
   TranscriptEntry,
@@ -25,24 +29,24 @@ type CopyStatus = {
 
 const AUTO_SCROLL_THRESHOLD_PX = 48;
 
-function formatEntryTime(timestamp: number): string {
-  return new Intl.DateTimeFormat("zh-CN", {
+function formatEntryTime(timestamp: number, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   }).format(timestamp);
 }
 
-function getSpeakerLabel(speaker: TranscriptSpeaker): string {
+function getSpeakerLabel(speaker: TranscriptSpeaker, t: (key: string) => string): string {
   if (speaker === "assistant") {
     return "AI";
   }
 
   if (speaker === "user") {
-    return "你";
+    return t("transcript.you");
   }
 
-  return "系统";
+  return t("transcript.system");
 }
 
 function TranscriptListComponent({
@@ -54,9 +58,11 @@ function TranscriptListComponent({
   const [visibleCount, setVisibleCount] = useState(
     TRANSCRIPT_INITIAL_WINDOW_SIZE,
   );
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage === "en" ? "en-US" : "zh-CN";
   const [copyStatus, setCopyStatus] = useState<CopyStatus>(null);
   const [isNearLatest, setIsNearLatest] = useState(true);
-  const listRef = useRef<HTMLOListElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const previousScrollHeightRef = useRef<number | null>(null);
   const previousEntryCountRef = useRef(entries.length);
   const hasInitialScrolledRef = useRef(false);
@@ -72,6 +78,14 @@ function TranscriptListComponent({
     effectiveVisibleCount,
   );
   const hiddenEntryCount = Math.max(0, entries.length - visibleEntries.length);
+
+  const rowVirtualizer = useVirtualizer({
+    count: visibleEntries.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => TRANSCRIPT_ESTIMATED_ROW_SIZE,
+    overscan: TRANSCRIPT_VIRTUAL_OVERSCAN,
+    getItemKey: (index) => visibleEntries[index]?.id ?? index,
+  });
 
   useLayoutEffect(() => {
     const listElement = listRef.current;
@@ -171,101 +185,140 @@ function TranscriptListComponent({
     }, 2_000);
   };
 
+  const virtualItems = rowVirtualizer.getVirtualItems();
+
   if (entries.length === 0) {
     return (
-      <div className="transcript-empty" role="status">
+      <div
+        className="grid min-h-[180px] place-content-center justify-items-center gap-2 rounded-md border border-dashed border-border bg-grid-line p-6 text-center text-soft-fg-muted"
+        role="status"
+      >
         <History size={24} aria-hidden="true" />
-        <strong>开始一段新对话</strong>
-        <span>发送文字、语音或画面问题后，消息会显示在这里。</span>
+        <strong className="text-foreground">{t("conversation.startNew")}</strong>
+        <span className="max-w-[38ch] text-[0.84rem] leading-[1.5]">
+          {t("transcript.emptyHint")}
+        </span>
       </div>
     );
   }
 
   return (
-    <div className="transcript-scroll-region">
-      <ol
+    <div className="relative flex min-h-0 flex-col overflow-hidden">
+      {hiddenEntryCount > 0 ? (
+        <button
+          className="my-2 inline-flex min-h-[30px] cursor-pointer items-center justify-center gap-1.5 self-center rounded-lg border border-white/10 bg-white/[0.04] px-[9px] py-[5px] text-[0.76rem] font-[600] text-soft-fg-bright transition-[background,border-color] duration-[200ms] hover:border-white/20 hover:bg-white/[0.08] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          type="button"
+          onClick={handleShowEarlier}
+        >
+          <History size={15} aria-hidden="true" />
+          {t("transcript.showEarlier", { count: hiddenEntryCount })}
+        </button>
+      ) : null}
+
+      <div
         ref={listRef}
-        className="transcript-list"
-        aria-live="polite"
+        className="relative min-h-0 flex-1 overflow-auto"
         onScroll={handleListScroll}
       >
-        {hiddenEntryCount > 0 ? (
-          <li className="transcript-history-control">
-            <button type="button" onClick={handleShowEarlier}>
-              <History size={15} aria-hidden="true" />
-              显示更早消息（还有 {hiddenEntryCount} 条）
-            </button>
-          </li>
-        ) : null}
+        <ol
+          className="relative m-0 w-full list-none p-0"
+          style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+          aria-live="polite"
+        >
+          {virtualItems.map((virtualRow) => {
+            const entry = visibleEntries[virtualRow.index];
+            const canRetry = retryableEntryIds.has(entry.id);
+            const currentCopyStatus =
+              copyStatus?.entryId === entry.id ? copyStatus.state : null;
+            const isUser = entry.speaker === "user";
+            const isAssistant = entry.speaker === "assistant";
+            const isFailed = entry.deliveryStatus === "failed";
 
-        {visibleEntries.map((entry) => {
-          const canRetry = retryableEntryIds.has(entry.id);
-          const currentCopyStatus =
-            copyStatus?.entryId === entry.id ? copyStatus.state : null;
-
-          return (
-            <li
-              className={`transcript-entry ${entry.speaker}`}
-              data-delivery-status={entry.deliveryStatus}
-              key={entry.id}
-            >
-              <div className="transcript-entry-heading">
-                <strong>{getSpeakerLabel(entry.speaker)}</strong>
-                <div className="transcript-entry-meta">
-                  {entry.deliveryStatus === "failed" ? (
-                    <span className="transcript-failed-label">发送失败</span>
-                  ) : null}
-                  <time dateTime={new Date(entry.createdAt).toISOString()}>
-                    {formatEntryTime(entry.createdAt)}
-                  </time>
-                </div>
-              </div>
-              <p>{entry.text}</p>
-              <div className="transcript-entry-actions">
-                <button
-                  type="button"
-                  onClick={() => void handleCopy(entry)}
-                  aria-label={`复制${getSpeakerLabel(entry.speaker)}消息`}
+            return (
+              <li
+                className="absolute left-0 top-0 w-full pb-2.5 box-border"
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                key={entry.id}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                <div
+                  className={`grid gap-1.5 rounded-md border-l-4 bg-soft-bg p-3 ${
+                    isUser
+                      ? "border-l-primary"
+                      : isAssistant
+                        ? "border-l-destructive"
+                        : "border-l-accent"
+                  } ${isFailed ? "border-l-destructive bg-danger-soft-bg" : ""}`}
+                  data-delivery-status={entry.deliveryStatus}
                 >
-                  <Copy size={14} aria-hidden="true" />
-                  {currentCopyStatus === "success"
-                    ? "已复制"
-                    : currentCopyStatus === "error"
-                      ? "复制失败"
-                      : "复制"}
-                </button>
-                {canRetry ? (
-                  <button
-                    type="button"
-                    onClick={() => onRetry(entry.id)}
-                    disabled={isRetryDisabled}
-                  >
-                    <RefreshCcw size={14} aria-hidden="true" />
-                    重试
-                  </button>
-                ) : null}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
+                  <div className="flex items-center justify-between gap-3">
+                    <strong className="text-foreground">{getSpeakerLabel(entry.speaker, t)}</strong>
+                    <div className="flex items-center gap-2">
+                      {entry.deliveryStatus === "failed" ? (
+                        <span className="text-[0.72rem] font-[600] text-danger-text">{t("conversation.sendFailed")}</span>
+                      ) : null}
+                      <time className="text-[0.78rem] text-soft-fg-muted" dateTime={new Date(entry.createdAt).toISOString()}>
+                        {formatEntryTime(entry.createdAt, locale)}
+                      </time>
+                    </div>
+                  </div>
+                  <p className="m-0 leading-[1.45] text-soft-fg-bright">{entry.text}</p>
+                  <div className="flex min-h-0 items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleCopy(entry)}
+                      aria-label={t("transcript.copyWithSpeaker", { speaker: getSpeakerLabel(entry.speaker, t) })}
+                      className="inline-flex min-h-[26px] cursor-pointer items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-[7px] py-[3px] text-[0.76rem] font-[600] text-soft-fg-bright transition-[background,color] duration-[200ms] hover:bg-white/[0.08] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Copy size={14} aria-hidden="true" />
+                      {currentCopyStatus === "success"
+                        ? t("transcript.copied")
+                        : currentCopyStatus === "error"
+                          ? t("transcript.copyFailed")
+                          : t("transcript.copy")}
+                    </button>
+                    {canRetry ? (
+                      <button
+                        type="button"
+                        onClick={() => onRetry(entry.id)}
+                        disabled={isRetryDisabled}
+                        className="inline-flex min-h-[26px] cursor-pointer items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-[7px] py-[3px] text-[0.76rem] font-[600] text-soft-fg-bright transition-[background,color] duration-[200ms] hover:bg-white/[0.08] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        <RefreshCcw size={14} aria-hidden="true" />
+                        {t("transcript.retry")}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
 
       {!isNearLatest ? (
         <button
-          className="transcript-jump-latest"
+          className="absolute bottom-3 right-3 inline-flex min-h-[30px] cursor-pointer items-center justify-center gap-1.5 rounded-lg border-0 bg-[color:var(--color-primary)] px-[9px] py-[5px] text-[0.76rem] font-[600] text-white shadow-[0_0_0_1px_rgba(94,106,210,0.5),0_4px_12px_rgba(94,106,210,0.3)] transition-[background,box-shadow] duration-[200ms] hover:bg-[#6872d9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           type="button"
           onClick={handleJumpToLatest}
         >
           <ArrowDown size={15} aria-hidden="true" />
-          回到最新
+          {t("transcript.backToLatest")}
         </button>
       ) : null}
 
       <span className="sr-only" aria-live="polite">
         {copyStatus?.state === "success"
-          ? "消息已复制到剪贴板"
+          ? t("transcript.copiedLive")
           : copyStatus?.state === "error"
-            ? "无法复制消息，请检查浏览器权限"
+            ? t("transcript.copyErrorLive")
             : ""}
       </span>
     </div>

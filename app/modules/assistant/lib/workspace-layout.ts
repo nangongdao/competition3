@@ -75,3 +75,19 @@ export function swapWorkspacePanels(
 ): WorkspaceLayout["panelOrder"] {
   return [panelOrder[1], panelOrder[0]];
 }
+
+/**
+ * 把拖拽指针位置换算为会话面板宽度百分比。
+ *
+ * `panelOrder[0]` 决定会话面板位于左侧还是右侧：
+ * - 会话面板在左侧时，宽度即指针相对容器左边缘的百分比；
+ * - 会话面板在右侧时，宽度为右侧到指针的百分比。
+ */
+export function resolveSessionWidthFromPointer(
+  pointerClientX: number,
+  bounds: Pick<DOMRect, "left" | "width">,
+  panelOrder: readonly WorkspacePanelId[],
+): number {
+  const pointerPercent = ((pointerClientX - bounds.left) / bounds.width) * 100;
+  return panelOrder[0] === "session" ? pointerPercent : 100 - pointerPercent;
+}

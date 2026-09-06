@@ -153,7 +153,57 @@ Suggested runs:
 Keep the exported JSON or CSV files with the PR notes so the design table can
 be audited later.
 
-## 6. PR Evidence
+## 6. Tauri 桌面演示（原生外壳）
+
+桌面外壳（`src-tauri/`，PR #45 已并入 `main`）通过 `use-tauri` hook 在原生
+WebView 中复用同一套 Web / Worker 前端，并暴露两个 Rust 命令
+（`get_host_platform` / `run_terminal_command`）。桌面演示分为**开发态**与
+**打包态**两条路径。
+
+> 前置条件：本机需安装 [Rust 工具链](https://rustup.rs/)（Tauri v2 在
+> Linux 还需 `webkit2gtk` / `libappindicator` 等系统库，详见
+> [Tauri 前置依赖](https://v2.tauri.app/start/prerequisites/))。
+
+### 6.1 开发态运行（HMR）
+
+```powershell
+corepack enable
+corepack prepare pnpm@11.6.0 --activate
+pnpm dev:tauri
+```
+
+该命令先以 Vite dev server（5173，`strictPort`）启动前端，再启动原生窗口
+加载 `devUrl`。验证要点：
+
+* 原生窗口以 1440x900 打开，标题为 “AI Visual Dialogue Assistant”。
+* 摄像头授权弹窗、实时预览、Chat / Realtime 两种 provider 行为与浏览器一致。
+* 开发态下 WebView 自动打开 DevTools（`debug_assertions`）。
+* `use-tauri` 检测到 `__TAURI_INTERNALS__`，host platform 返回当前系统名
+  （macos / linux / windows）。
+
+### 6.2 打包态验证（发布路径）
+
+```powershell
+pnpm build:tauri
+```
+
+该命令先执行 `beforeBuildCommand: pnpm build`（产出 `dist/`），再由 Tauri
+编译 Rust 后端并打包（`bundle.targets = "all"`），产物位于
+`src-tauri/target/release/bundle/`。验证要点：
+
+* `dist/` 前端产物被正确嵌入 `frontendDist`，离线可启动。
+* 原生安装包（MSI / DMG / deb 或 AppImage）生成成功，应用可安装并启动。
+* CSP（`default-src 'self'`）下摄像头 `getUserMedia`、媒体 `blob:`、
+  WebSocket `wss:` 均可用。
+* 无需外置 dev server，独立运行后端调用由 Worker 提供（本地需起 Worker
+  或用远程部署地址）。
+
+### 6.3 桌面端 Cost-Control 佐证
+
+同第 5 节，在桌面窗口内对同一场景重复采样并导出用量报告，作为跨 Web /
+桌面一致的性能佐证。
+
+## 7. PR Evidence
 
 Each final demo PR should include:
 

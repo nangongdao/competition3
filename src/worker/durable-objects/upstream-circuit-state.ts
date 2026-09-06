@@ -28,6 +28,44 @@ export type CircuitPolicy = {
   neutralProbeCooldownMs: number;
 };
 
+/**
+ * 熔断器只读健康快照（用于 `GET /api/circuit` 等监控端点）。
+ *
+ * 与 `CircuitState` 对齐，另派生 `isOpen`（当前是否拒绝请求）与
+ * `retryAfterMs`（若拒绝，还需等待多久），供监控/告警直接消费。
+ */
+export type CircuitSnapshot = {
+  mode: CircuitMode;
+  consecutiveFailures: number;
+  openUntil: number;
+  generation: number;
+  probeInFlight: boolean;
+  isOpen: boolean;
+  retryAfterMs: number;
+};
+
+/**
+ * 由 `CircuitState` 派生只读快照。不修改任何状态，纯函数。
+ */
+export function createCircuitSnapshot(
+  state: CircuitState,
+  now: number,
+): CircuitSnapshot {
+  const refusing =
+    (state.mode === "open" || state.mode === "half-open") &&
+    now < state.openUntil;
+
+  return {
+    mode: state.mode,
+    consecutiveFailures: state.consecutiveFailures,
+    openUntil: state.openUntil,
+    generation: state.generation,
+    probeInFlight: state.probeInFlight,
+    isOpen: refusing,
+    retryAfterMs: refusing ? Math.max(1, state.openUntil - now) : 0,
+  };
+}
+
 export const DEFAULT_CIRCUIT_POLICY: CircuitPolicy = {
   failureThreshold: 3,
   openCooldownMs: 20_000,

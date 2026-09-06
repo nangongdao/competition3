@@ -12,6 +12,7 @@ export default tseslint.config(
       "node_modules/",
       ".trellis/",
       ".wrangler/",
+      "src-tauri/",
       "worker-configuration.d.ts",
     ],
   },
@@ -56,6 +57,30 @@ export default tseslint.config(
         "warn",
         { allowConstantExport: true },
       ],
+    },
+  },
+  {
+    // Node CLI 脚本（如打包体积预算检查）：提供 node globals 并允许 console 输出。
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      "no-console": "off",
+    },
+  },
+  {
+    // 根目录工具配置文件（如 Lighthouse 预算 lighthouserc.cjs）：Node CJS globals。
+    files: ["lighthouserc.cjs"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      "no-console": "off",
     },
   },
 );

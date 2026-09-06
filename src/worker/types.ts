@@ -9,6 +9,8 @@ type GeneratedWorkerBindings = {
 };
 
 export type CloudflareBindings = GeneratedWorkerBindings & {
+  /** 会话/消息持久化 D1 数据库（M3.2）。 */
+  SESSIONS_DB?: D1Database;
   /** 上游 LLM/ASR 供应商 API 密钥（经 `wrangler secret` 注入）。 */
   OPENAI_API_KEY?: string;
   /** 兼容 OpenAI 的 chat completions 基址（provider 指纹，本地配置）。 */

@@ -3,6 +3,13 @@ import type { TranscriptEntry } from "@/modules/assistant/types";
 export const TRANSCRIPT_INITIAL_WINDOW_SIZE = 40;
 export const TRANSCRIPT_WINDOW_STEP = 30;
 
+/** 转写条目平均高度估算（px），用于虚拟化 estimateSize 的初始值，随后由 measureElement 精确测量。 */
+export const TRANSCRIPT_ESTIMATED_ROW_SIZE = 112;
+/** 转写条目行间间距（px），计入估算行高。 */
+export const TRANSCRIPT_ROW_GAP = 10;
+/** 虚拟化视口外预渲染行数，减少滚动白屏。 */
+export const TRANSCRIPT_VIRTUAL_OVERSCAN = 6;
+
 export type ConversationExport = {
   version: 1;
   exportedAt: number;

@@ -7,6 +7,9 @@ import {
   isChatTurnRetryAllowed,
   serializeConversationJson,
   serializeConversationMarkdown,
+  TRANSCRIPT_ESTIMATED_ROW_SIZE,
+  TRANSCRIPT_ROW_GAP,
+  TRANSCRIPT_VIRTUAL_OVERSCAN,
 } from "@/modules/assistant/lib/conversation";
 import type { TranscriptEntry } from "@/modules/assistant/types";
 
@@ -41,6 +44,18 @@ describe("conversation transcript windowing", () => {
   it("grows the window without exceeding the total", () => {
     expect(getNextTranscriptVisibleCount(40, 100, 30)).toBe(70);
     expect(getNextTranscriptVisibleCount(70, 80, 30)).toBe(80);
+  });
+});
+
+describe("conversation virtualization config (M2.4)", () => {
+  it("keeps a positive estimated row size that accommodates a text entry plus gap", () => {
+    expect(TRANSCRIPT_ESTIMATED_ROW_SIZE).toBeGreaterThan(TRANSCRIPT_ROW_GAP);
+    expect(TRANSCRIPT_ESTIMATED_ROW_SIZE).toBeGreaterThan(0);
+  });
+
+  it("uses a sane overscan to avoid scroll blanking without over-rendering", () => {
+    expect(TRANSCRIPT_VIRTUAL_OVERSCAN).toBeGreaterThanOrEqual(3);
+    expect(TRANSCRIPT_VIRTUAL_OVERSCAN).toBeLessThanOrEqual(12);
   });
 });
 

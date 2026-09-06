@@ -9,8 +9,10 @@ import { accessControl } from "./middleware/access-control";
 import { rateLimit } from "./middleware/rate-limit";
 import { requestContext } from "./middleware/request-context";
 import { chatRoutes } from "./routes/chat/router";
+import { circuitRoutes } from "./routes/circuit/router";
 import { providerRoutes } from "./routes/provider/router";
 import { realtimeRoutes } from "./routes/realtime/router";
+import { sessionRoutes } from "./routes/sessions/router";
 import { speechRoutes } from "./routes/speech/router";
 import type { AppEnv, HealthResponse } from "./types";
 
@@ -83,6 +85,12 @@ app.get("/api/health", (c) => {
   return c.json(response);
 });
 app.route("/api/provider", providerRoutes);
+
+// 熔断器只读健康端点：无上游成本，不套 accessControl/rateLimit
+app.route("/api/circuit", circuitRoutes);
+
+// 会话持久化 CRUD：无上游额度成本，不套 accessControl/rateLimit
+app.route("/api/sessions", sessionRoutes);
 
 // 消耗上游额度的端点：鉴权 + 限流（SEC-01）
 app.use("/api/chat/*", accessControl(), rateLimit("chat"));

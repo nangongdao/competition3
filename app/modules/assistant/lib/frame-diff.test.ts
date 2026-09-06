@@ -4,8 +4,12 @@ import {
   compareFrameSignatures,
   createFrameSignatureFromImageData,
   frameDifferenceRatio,
+  FRAME_DIFF_HIGH_LIGHT_TOLERANCE,
+  FRAME_DIFF_LOW_LIGHT_TOLERANCE,
   FRAME_DIFF_MIN_CHANGED_CELLS,
   FRAME_DIFF_SEND_THRESHOLD,
+  meanLuma,
+  resolveIlluminationTolerance,
   shouldSendFrame,
   type FrameImageData,
   type FrameSignature,
@@ -190,5 +194,64 @@ describe("compareFrameSignatures — 三层判定", () => {
     expect(result.reason).toBe("static");
     expect(Number.isNaN(result.globalDiff)).toBe(false);
     expect(result.globalDiff).toBe(0);
+  });
+
+  it("treats an extreme uniform shift in dim light as illumination, not scene change", () => {
+    // 暗光（平均亮度约 0.2）：同样的 0.15 均匀偏移应归为光照，避免误触发。
+    const previous = buildSignature([0.1, 0.2, 0.2, 0.3, 0.2, 0.1, 0.2, 0.3, 0.2]);
+    const next = buildSignature([0.25, 0.35, 0.35, 0.45, 0.35, 0.25, 0.35, 0.45, 0.35]);
+
+    const result = compareFrameSignatures(previous, next);
+
+    expect(result.reason).toBe("illumination-only");
+    expect(result.shouldSend).toBe(false);
+  });
+
+  it("treats an extreme uniform shift in bright light as a real scene change", () => {
+    // 亮光（平均亮度约 0.75）：同样的 0.15 均匀偏移超过亮光容忍上限，
+    // 不能用纯光照解释，应视为真实场景切换（改善强光漏检）。
+    const previous = buildSignature([0.7, 0.8, 0.7, 0.75, 0.8, 0.75, 0.7, 0.8, 0.75]);
+    const next = buildSignature([0.85, 0.95, 0.85, 0.9, 0.95, 0.9, 0.85, 0.95, 0.9]);
+
+    const result = compareFrameSignatures(previous, next);
+
+    expect(result.reason).toBe("global-change");
+    expect(result.shouldSend).toBe(true);
+  });
+});
+
+describe("meanLuma", () => {
+  it("computes the normalized mean brightness of a signature", () => {
+    expect(meanLuma(buildSignature([0.1, 0.3, 0.5]))).toBeCloseTo(0.3, 6);
+  });
+
+  it("clamps out-of-range values into [0, 1]", () => {
+    expect(meanLuma(buildSignature([-0.5, 0.5, 2]))).toBeCloseTo(0.5, 6);
+  });
+
+  it("returns zero for an empty signature", () => {
+    expect(meanLuma(buildSignature([], 1, 1))).toBe(0);
+  });
+});
+
+describe("resolveIlluminationTolerance", () => {
+  it("uses the low-light tolerance in dim scenes", () => {
+    expect(resolveIlluminationTolerance(0.1)).toBe(FRAME_DIFF_LOW_LIGHT_TOLERANCE);
+  });
+
+  it("uses the high-light tolerance in bright scenes", () => {
+    expect(resolveIlluminationTolerance(0.8)).toBe(FRAME_DIFF_HIGH_LIGHT_TOLERANCE);
+  });
+
+  it("linearly interpolates between low and high light bands", () => {
+    // 0.4 处于 [0.3, 0.5] 中段，容忍度应介于两档之间。
+    const tolerance = resolveIlluminationTolerance(0.4);
+    expect(tolerance).toBeGreaterThan(FRAME_DIFF_HIGH_LIGHT_TOLERANCE);
+    expect(tolerance).toBeLessThan(FRAME_DIFF_LOW_LIGHT_TOLERANCE);
+  });
+
+  it("clamps out-of-range inputs", () => {
+    expect(resolveIlluminationTolerance(-1)).toBe(FRAME_DIFF_LOW_LIGHT_TOLERANCE);
+    expect(resolveIlluminationTolerance(2)).toBe(FRAME_DIFF_HIGH_LIGHT_TOLERANCE);
   });
 });
