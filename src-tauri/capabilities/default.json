@@ -1,0 +1,10 @@
+{
+  "identifier": "cnb.yogsthoth1.competition3",
+  "description": "Core capabilities for the AI Visual Dialogue desktop application",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "shell:default"
+  ]
+}

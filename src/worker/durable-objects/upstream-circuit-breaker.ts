@@ -3,11 +3,13 @@ import { DurableObject } from "cloudflare:workers";
 import type { CloudflareBindings } from "../types";
 import {
   acquireCircuitPermit,
+  createCircuitSnapshot,
   createInitialCircuitState,
   recordCircuitFailure,
   recordCircuitNeutral,
   recordCircuitSuccess,
   type CircuitPermit,
+  type CircuitSnapshot,
   type CircuitState,
 } from "./upstream-circuit-state";
 
@@ -53,6 +55,14 @@ export class UpstreamCircuitBreaker extends DurableObject<CloudflareBindings> {
     }
 
     return result.permit;
+  }
+
+  /**
+   * 只读健康快照：返回当前熔断状态，不修改任何存储。
+   * 供 `GET /api/circuit` 等监控/告警端点消费。
+   */
+  snapshot(): CircuitSnapshot {
+    return createCircuitSnapshot(this.readState(), Date.now());
   }
 
   recordSuccess(generation: number): void {

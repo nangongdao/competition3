@@ -32,3 +32,11 @@ Thumbs.db
 
 # Local tooling
 .nezha/
+
+# Playwright (M5.1 E2E)
+test-results/
+playwright-report/
+
+# Lighthouse (M5.4 性能基线) 审计产物
+.lighthouseci/
+

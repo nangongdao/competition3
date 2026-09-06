@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   acquireCircuitPermit,
+  createCircuitSnapshot,
   createInitialCircuitState,
   DEFAULT_CIRCUIT_POLICY,
   recordCircuitFailure,
@@ -166,5 +167,53 @@ describe("upstream circuit state", () => {
     expect(secondProbe.state.openUntil).toBe(
       firstProbe.state.openUntil + DEFAULT_CIRCUIT_POLICY.probeLeaseMs,
     );
+  });
+});
+
+describe("createCircuitSnapshot (只读健康快照)", () => {
+  it("derives a closed snapshot with isOpen=false and no retry delay", () => {
+    const state = createInitialCircuitState();
+    const snapshot = createCircuitSnapshot(state, NOW);
+
+    expect(snapshot).toEqual({
+      mode: "closed",
+      consecutiveFailures: 0,
+      openUntil: 0,
+      generation: 0,
+      probeInFlight: false,
+      isOpen: false,
+      retryAfterMs: 0,
+    });
+  });
+
+  it("derives an open snapshot with isOpen=true and a positive retry delay", () => {
+    const openedState = openCircuit();
+    const snapshot = createCircuitSnapshot(openedState, NOW);
+
+    expect(snapshot.mode).toBe("open");
+    expect(snapshot.consecutiveFailures).toBe(3);
+    expect(snapshot.isOpen).toBe(true);
+    expect(snapshot.retryAfterMs).toBeGreaterThan(0);
+    expect(snapshot.retryAfterMs).toBe(
+      openedState.openUntil - NOW,
+    );
+  });
+
+  it("derives a non-open snapshot once the open cooldown has elapsed", () => {
+    const openedState = openCircuit();
+    const afterCooldown = openedState.openUntil;
+    const snapshot = createCircuitSnapshot(openedState, afterCooldown);
+
+    expect(snapshot.isOpen).toBe(false);
+    expect(snapshot.retryAfterMs).toBe(0);
+  });
+
+  it("does not mutate the input state", () => {
+    const openedState = openCircuit();
+    const before = JSON.stringify(openedState);
+
+    createCircuitSnapshot(openedState, NOW);
+
+    expect(JSON.stringify(openedState)).toBe(before);
   });
 });

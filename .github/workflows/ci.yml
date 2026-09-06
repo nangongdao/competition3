@@ -40,5 +40,117 @@ jobs:
       - name: 生产构建
         run: pnpm build
 
+      # M5.4 性能基线：打包体积预算（gzip <300KB，单 JS chunk <220KB）
+      - name: 打包体积预算检查
+        run: pnpm check:bundle-size
+
       - name: 部署配置校验（防止 DO 绑定缺失）
         run: npx wrangler deploy --dry-run --outdir=/tmp/wrangler-dry
+
+  # M5.1 Playwright E2E smoke 子集（三条核心路径）
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.6.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 生成 Worker 类型
+        run: npx wrangler types
+
+      - name: 生产构建
+        run: pnpm build
+
+      - name: 安装 Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: 运行 E2E smoke 子集
+        run: npx playwright test --grep "@smoke" --reporter=github
+
+  # M5.4 性能基线深化：Lighthouse 报告产出 + 预算断言（warn 级，不阻塞主流水线）。
+  # 需要真实 Chrome + 网络，故作为独立 job；失败不阻断合并，结果以报告 artifact 沉淀。
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.6.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 生成 Worker 类型
+        run: npx wrangler types
+
+      - name: 生产构建
+        run: pnpm build
+
+      - name: 安装 Chromium（供 Lighthouse 使用）
+        run: npx playwright install --with-deps chromium
+
+      - name: 运行 Lighthouse 性能审计（报告 + 预算断言）
+        run: |
+          # 动态解析 Playwright 安装的 Chromium 路径（版本目录不固定）。
+          CHROME_PATH=$(find /root/.cache/ms-playwright -path '*/chrome-linux*/chrome' -type f | head -1)
+          echo "CHROME_PATH=$CHROME_PATH"
+          CHROME_PATH="$CHROME_PATH" pnpm perf:audit
+        continue-on-error: true
+
+      - name: 上传 Lighthouse 报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: .lighthouseci/
+          if-no-files-found: warn
+
+  # Tauri 桌面外壳发布验证：编译 Rust 后端并打包，确保桌面发布路径可复现。
+  # 桌面壳（src-tauri/）是 PR #45 并入的次要交付物，用独立 job 验证，
+  # 避免其较重依赖（Rust + webkit2gtk）拖慢主流水线。
+  tauri-desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.6.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 安装 Tauri Linux 系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 生成 Worker 类型
+        run: npx wrangler types
+
+      - name: Tauri 桌面发布构建
+        run: pnpm build:tauri

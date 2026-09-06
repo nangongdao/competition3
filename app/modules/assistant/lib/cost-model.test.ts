@@ -7,8 +7,10 @@ import {
   compareResolutionCosts,
   createEmptyUsage,
   createEmptyUsageReport,
+  describeBillSource,
   estimateCostUsd,
   estimateImageTokens,
+  estimateSkippedFramesSavings,
   formatTokens,
   formatUsd,
   parseResponseUsage,
@@ -380,5 +382,52 @@ describe("视觉 token 成本估算", () => {
 
     expect(results.some((item) => item.width >= 1024)).toBe(false);
     expect(results[0]?.width).toBe(768);
+  });
+});
+
+describe("estimateSkippedFramesSavings", () => {
+  it("returns zero when no frames were skipped", () => {
+    expect(estimateSkippedFramesSavings(0, 640, 360)).toBe(0);
+  });
+
+  it("returns zero for negative or non-finite frame counts", () => {
+    expect(estimateSkippedFramesSavings(-5, 640, 360)).toBe(0);
+    expect(estimateSkippedFramesSavings(Number.NaN, 640, 360)).toBe(0);
+  });
+
+  it("estimates 10 skipped 640x360 frames at the image input rate", () => {
+    // 每帧 425 token，10 帧 = 4250 token，单价 $5/1M → $0.02125
+    const saving = estimateSkippedFramesSavings(10, 640, 360);
+    expect(saving).toBeCloseTo((4250 * 5) / 1_000_000, 6);
+  });
+
+  it("scales linearly with skipped frames", () => {
+    const one = estimateSkippedFramesSavings(1, 640, 360);
+    const ten = estimateSkippedFramesSavings(10, 640, 360);
+    expect(ten).toBeCloseTo(one * 10, 6);
+  });
+
+  it("honors the input image price from the price table", () => {
+    // 512×288 = 255 token/帧，单价 inputImage $5/1M
+    const saving = estimateSkippedFramesSavings(1, 512, 288);
+    expect(saving).toBeCloseTo((255 * 5) / 1_000_000, 6);
+  });
+});
+
+describe("describeBillSource", () => {
+  it("maps Realtime mode to authoritative response.done source", () => {
+    const source = describeBillSource(false);
+    expect(source.kind).toBe("realtime-response-done");
+    expect(source.usageAuthority).toBe("authoritative");
+    expect(source.priceSet).toBe("gpt-realtime-pricing");
+    expect(source.key).toBe("realtime");
+  });
+
+  it("maps Chat mode to estimated front-end source", () => {
+    const source = describeBillSource(true);
+    expect(source.kind).toBe("chat-frontend-estimate");
+    expect(source.usageAuthority).toBe("estimated");
+    expect(source.priceSet).toBe("chat-pricing");
+    expect(source.key).toBe("chat");
   });
 });

@@ -1,0 +1,258 @@
+@import "tailwindcss";
+
+/* ============================================================
+ * Design Tokens — Linear / Modern (M9.5 UI 视觉体系重构)
+ *
+ * 三层 token 架构（与 docs/upgrade-roadmap.md M2.1 对齐）：
+ *   1. primitive  —— 原始色板 / 间距 / 字号 / 圆角 / 阴影
+ *   2. semantic   —— 角色语义（bg/fg/border/accent/muted...）
+ *   3. component  —— 组件级（toolbar/button/card/input...）
+ *
+ * 视觉语言：Deep Space with Ambient Light。
+ *   近黑基底（#050506 / #020203，绝非纯黑）+ 靛蓝环境光
+ *   （#5E6AD2 及其透明度变体）+ 分层半透明表面。
+ *   深度来自分层环境光与多层阴影，而非硬边阴影 / 渐变填充。
+ *   圆角统一为 8-16px；边框近不可见（6-10% 白）。
+ *
+ * 全部经 Tailwind v4 `@theme` 注册为 CSS 变量 + 工具类，
+ * 使 `bg-background`、`text-foreground`、`border-border` 等
+ * 直接可用。暗色模式（M2.2）只需切换 semantic 层取值。
+ * ============================================================ */
+
+@theme {
+  /* ---------- Primitive：色板（Deep Space 基底 + 靛蓝环境光） ---------- */
+  --color-ink: #050506; /* background-base — 主画布，近黑非纯黑 */
+  --color-ink-2: #0a0a0c; /* background-elevated — 提升表面 */
+  --color-ink-3: #0f0f12; /* 更深输入表面 */
+  --color-panel: #ededef; /* 亮色 foreground 高光（用于反相强调） */
+  --color-panel-2: #e6e6e9;
+  --color-panel-3: #dcdce0;
+  --color-lime: #5e6ad2; /* accent — 主交互色，靛蓝 */
+  --color-lime-2: #6872d9; /* accent-bright — 主交互 hover */
+  --color-cyan: #7b88f5; /* 次级 accent（靛蓝高光） */
+  --color-cyan-2: #6f78e0;
+  --color-coral: #ef6d6d; /* destructive — 告警/危险 */
+  --color-coral-2: #d9534f;
+  --color-violet: #8b96f7; /* 环境光高光 */
+  --color-violet-2: #7c8bf5;
+  --color-fog: #8a8f98; /* foreground-muted — 正文/说明文字 */
+  --color-fog-2: #6b7076;
+
+  /* ---------- Primitive：间距 ---------- */
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-10: 2.5rem;
+
+  /* ---------- Primitive：字号 ---------- */
+  --text-2xs: 0.7rem;
+  --text-xs: 0.78rem;
+  --text-sm: 0.85rem;
+  --text-base: 0.92rem;
+  --text-lg: 1.1rem;
+  --text-xl: 1.35rem;
+
+  /* ---------- Primitive：圆角（Linear：8-16px） ---------- */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* ---------- Primitive：阴影（多层，Linear 签名） ---------- */
+  --shadow-soft: 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 2px 20px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 0 1px rgba(94, 106, 210, 0.4),
+    0 4px 12px rgba(94, 106, 210, 0.25),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+  --shadow-brand: 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 4px 20px rgba(0, 0, 0, 0.45),
+    0 0 40px rgba(94, 106, 210, 0.1);
+
+  /* ---------- Semantic：表面与文字 ---------- */
+  --color-background: #050506;
+  --color-foreground: #ededef;
+  --color-card: #0a0a0c;
+  --color-card-foreground: #ededef;
+  --color-popover: #0f0f12;
+  --color-popover-foreground: #ededef;
+
+  /* ---------- Semantic：边框与输入 ---------- */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-input: rgba(255, 255, 255, 0.1);
+  --color-ring: #5e6ad2;
+
+  /* ---------- Semantic：品牌与动作 ----------
+   * primary = 实心填充（按钮底色）；accent = 文字/图标强调。
+   * 深色基底上 accent 需更亮（#7581e2，对 #050506 ≈5.8:1，
+   * 满足 WCAG AA ≥4.5:1 的正常文字/图标可读性），
+   * 而 primary 保持 #5e6ad2 以保证白字按钮对比度（≈4.7:1）。
+   */
+  --color-primary: #5e6ad2;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #0a0a0c;
+  --color-secondary-foreground: #ededef;
+  --color-accent: #7581e2;
+  --color-accent-foreground: #ffffff;
+  --color-muted: #8a8f98;
+  --color-muted-foreground: rgba(255, 255, 255, 0.6);
+  --color-destructive: #ef6d6d;
+  --color-destructive-foreground: #ffffff;
+  --color-success: #6dd08e;
+  --color-warning: #efb75e;
+
+  /* ---------- Component：toolbar ---------- */
+  --color-toolbar-bg: rgba(5, 5, 6, 0.82);
+  --color-toolbar-fg: #ededef;
+  --color-toolbar-border: rgba(255, 255, 255, 0.08);
+  --color-toolbar-muted: rgba(255, 255, 255, 0.6);
+  --color-toolbar-active: #5e6ad2;
+
+  /* ---------- Component：button ---------- */
+  --color-btn-default-fg: rgba(255, 255, 255, 0.76);
+  --color-btn-default-border: rgba(255, 255, 255, 0.08);
+  --color-btn-primary-fg: #ffffff;
+  --color-btn-primary-bg: #5e6ad2;
+  --color-btn-danger-fg: #ffffff;
+  --color-btn-danger-bg: #ef6d6d;
+
+  /* ---------- Component：panel ---------- */
+  --color-panel-bg: rgba(255, 255, 255, 0.03);
+  --color-panel-border: rgba(255, 255, 255, 0.08);
+  --color-panel-fg: #ededef;
+
+  /* ---------- Component：state ring ---------- */
+  --color-ring-active: #5e6ad2;
+
+  /* ---------- Component：柔和浮层 / 卡片 / 扫描线（暗色适配） ---------- */
+  --color-soft-bg: rgba(255, 255, 255, 0.05);
+  --color-soft-bg-strong: rgba(255, 255, 255, 0.08);
+  --color-soft-fg: rgba(255, 255, 255, 0.7);
+  --color-soft-fg-muted: rgba(255, 255, 255, 0.55);
+  --color-soft-fg-bright: rgba(255, 255, 255, 0.85);
+  --color-float-bg: #0a0a0c;
+  --color-float-fg: #ededef;
+  --color-float-border: rgba(255, 255, 255, 0.1);
+  --color-grid-line: rgba(255, 255, 255, 0.04);
+  --color-error-soft-bg: rgba(239, 109, 109, 0.14);
+  --color-warn-bg: rgba(239, 183, 94, 0.14);
+  --color-warn-fg: #f2c47a;
+  --color-warn-border: rgba(239, 183, 94, 0.4);
+  --color-info-bg: rgba(94, 106, 210, 0.14);
+  --color-info-fg: #aab2f6;
+  --color-info-border: rgba(94, 106, 210, 0.4);
+  --color-success-bg: rgba(109, 208, 142, 0.14);
+  --color-success-fg: #8fe0a8;
+  --color-success-border: rgba(109, 208, 142, 0.4);
+  --color-danger-text: #f38b8b;
+  --color-danger-soft-bg: rgba(239, 109, 109, 0.16);
+  --color-danger-soft-border: rgba(239, 109, 109, 0.4);
+
+  /* ---------- 字体（Inter 几何无衬线） ---------- */
+  --font-sans: "Inter", "Geist Sans", system-ui, -apple-system, "Segoe UI",
+    "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* ============================================================
+ * M2.2 暗色模式 —— 浅色主题语义层覆盖
+ *
+ * 默认（:root）即暗色主题；当 `data-theme="light"` 时，
+ * 仅需反转 semantic / component 层的取值即可实现浅色，
+ * primitive 色板保持不变。切换过程无额外布局抖动。
+ *
+ * Linear/Modern 浅色：暖白画布 + 靛蓝 accent，保留精致层次。
+ * ============================================================ */
+[data-theme="light"] {
+  /* ---------- Semantic：表面与文字 ---------- */
+  --color-background: #fafafa;
+  --color-foreground: #17181a;
+  --color-card: #ffffff;
+  --color-card-foreground: #17181a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #17181a;
+
+  /* ---------- Semantic：边框与输入 ---------- */
+  --color-border: rgba(23, 24, 26, 0.1);
+  --color-input: rgba(23, 24, 26, 0.12);
+  --color-ring: #5e6ad2;
+
+  /* ---------- Semantic：品牌与动作 ---------- */
+  --color-primary: #4a53b5;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f2f2f4;
+  --color-secondary-foreground: #17181a;
+  --color-accent: #4a53b5;
+  --color-accent-foreground: #ffffff;
+  --color-muted: #5b6168;
+  --color-muted-foreground: #5b6168;
+  --color-destructive: #d9534f;
+  --color-destructive-foreground: #ffffff;
+  --color-success: #3f9d63;
+  --color-warning: #c9852e;
+
+  /* 浅色主题下二级/说明文字需满足 WCAG AA（≥4.5:1 on #fff） */
+  --color-fog: #5b6168;
+  --color-fog-2: #6b7076;
+  /* 浅色主题下的 accent 展示色需加深以保证白底可读性 */
+  --color-violet: #4a53b5;
+  --color-violet-2: #5b63c9;
+  --color-cyan: #2e7d8f;
+  --color-cyan-2: #2a6f80;
+  --color-lime: #4a53b5;
+  --color-lime-2: #5b63c9;
+
+  /* ---------- Component：toolbar ---------- */
+  --color-toolbar-bg: rgba(250, 250, 250, 0.82);
+  --color-toolbar-fg: #17181a;
+  --color-toolbar-border: rgba(23, 24, 26, 0.1);
+  --color-toolbar-muted: rgba(23, 24, 26, 0.76);
+  --color-toolbar-active: #5e6ad2;
+
+  /* ---------- Component：button ---------- */
+  --color-btn-default-fg: rgba(23, 24, 26, 0.72);
+  --color-btn-default-border: rgba(23, 24, 26, 0.1);
+  --color-btn-primary-fg: #ffffff;
+  --color-btn-primary-bg: #5e6ad2;
+  --color-btn-danger-fg: #ffffff;
+  --color-btn-danger-bg: #d9534f;
+
+  /* ---------- Component：panel ---------- */
+  --color-panel-bg: #ffffff;
+  --color-panel-border: rgba(23, 24, 26, 0.1);
+  --color-panel-fg: #17181a;
+
+  /* ---------- Component：state ring ---------- */
+  --color-ring-active: #5e6ad2;
+
+  /* ---------- Component：柔和浮层 / 卡片（浅色反转） ---------- */
+  /* 浅色主题下小字号说明/占位符/次级文字需满足 WCAG AA（≥4.5:1 on #fff）：
+   *   soft-fg-muted 0.42→0.60（2.68→4.65:1）
+   *   soft-fg       0.60→0.66（4.65→5.70:1）
+   */
+  --color-soft-bg: rgba(23, 24, 26, 0.05);
+  --color-soft-bg-strong: rgba(23, 24, 26, 0.08);
+  --color-soft-fg: rgba(23, 24, 26, 0.66);
+  --color-soft-fg-muted: rgba(23, 24, 26, 0.6);
+  --color-soft-fg-bright: rgba(23, 24, 26, 0.85);
+  --color-float-bg: #ffffff;
+  --color-float-fg: #17181a;
+  --color-float-border: rgba(23, 24, 26, 0.12);
+  --color-grid-line: rgba(23, 24, 26, 0.05);
+  --color-error-soft-bg: rgba(217, 83, 79, 0.1);
+  --color-warn-bg: rgba(201, 133, 46, 0.12);
+  --color-warn-fg: #8a5a1c;
+  --color-warn-border: rgba(201, 133, 46, 0.4);
+  --color-info-bg: rgba(94, 106, 210, 0.1);
+  --color-info-fg: #4a53b5;
+  --color-info-border: rgba(94, 106, 210, 0.4);
+  --color-success-bg: rgba(63, 157, 99, 0.12);
+  --color-success-fg: #2d7a47;
+  --color-success-border: rgba(63, 157, 99, 0.4);
+  --color-danger-text: #b3352f;
+  --color-danger-soft-bg: rgba(217, 83, 79, 0.1);
+  --color-danger-soft-border: rgba(217, 83, 79, 0.4);
+}

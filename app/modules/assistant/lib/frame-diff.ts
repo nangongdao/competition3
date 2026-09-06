@@ -8,6 +8,15 @@ export const FRAME_DIFF_MIN_CHANGED_CELLS = 3;
 /** 全局亮度偏移容忍度：低于该值的均匀偏移视为光照变化，不触发。 */
 export const FRAME_DIFF_ILLUMINATION_TOLERANCE = 0.06;
 
+/** 亮光环境下可接受的全局亮度偏移上限（归一化亮度 ≥0.5）。 */
+export const FRAME_DIFF_HIGH_LIGHT_TOLERANCE = 0.12;
+/** 暗光环境下可接受的全局亮度偏移上限（归一化亮度 <0.3）。 */
+export const FRAME_DIFF_LOW_LIGHT_TOLERANCE = 0.2;
+/** 判定为"暗光"的归一化亮度阈值（低于该值采用高光照容忍）。 */
+export const FRAME_DIFF_LOW_LIGHT_LUMA = 0.3;
+/** 判定为"亮光"的归一化亮度阈值（高于该值采用常规光照容忍）。 */
+export const FRAME_DIFF_HIGH_LIGHT_LUMA = 0.5;
+
 export type FrameSignature = {
   width: number;
   height: number;
@@ -143,6 +152,53 @@ export function frameDifferenceRatio(
 }
 
 /**
+ * 计算一帧签名的平均亮度。
+ *
+ * 用于光照自适应：暗光下传感器增益高、亮度抖动明显，需要更高的光照容忍；
+ * 亮光下量化更精细，可收紧容忍以捕捉真实变化。空签名返回 0。
+ *
+ * @param signature 帧签名
+ * @returns 归一化平均亮度 [0, 1]
+ */
+export function meanLuma(signature: FrameSignature): number {
+  if (signature.luma.length === 0) {
+    return 0;
+  }
+
+  const sum = signature.luma.reduce((acc, value) => acc + normalizeLuma(value), 0);
+  return sum / signature.luma.length;
+}
+
+/**
+ * 根据画面平均亮度解析自适应的光照容忍度。
+ *
+ * 思路：暗光环境（平均亮度低）传感器增益被放大，像素亮度抖动更剧烈，
+ * 同一大小的全局亮度偏移更可能是光照/噪声而非内容变化，因此提高容忍度；
+ * 亮光环境量化更精细，用更小的容忍度以捕捉真实场景变化。
+ *
+ * 在暗光与亮光阈值之间线性插值，避免跳变。
+ *
+ * @param frameLuma 当前帧平均亮度 [0, 1]
+ * @returns 该亮度下可接受的全局亮度偏移上限
+ */
+export function resolveIlluminationTolerance(frameLuma: number): number {
+  const normalizedLuma = normalizeLuma(frameLuma);
+
+  if (normalizedLuma < FRAME_DIFF_LOW_LIGHT_LUMA) {
+    return FRAME_DIFF_LOW_LIGHT_TOLERANCE;
+  }
+
+  if (normalizedLuma >= FRAME_DIFF_HIGH_LIGHT_LUMA) {
+    return FRAME_DIFF_HIGH_LIGHT_TOLERANCE;
+  }
+
+  const t = (normalizedLuma - FRAME_DIFF_LOW_LIGHT_LUMA) /
+    (FRAME_DIFF_HIGH_LIGHT_LUMA - FRAME_DIFF_LOW_LIGHT_LUMA);
+  return FRAME_DIFF_LOW_LIGHT_TOLERANCE +
+    (FRAME_DIFF_HIGH_LIGHT_TOLERANCE - FRAME_DIFF_LOW_LIGHT_TOLERANCE) * t;
+}
+
+/**
  * 比较两帧签名，判断是否需要上传（三层判定）。
  *
  *   1. 先剔除全局亮度偏移（光照变化不代表内容变化）
@@ -216,11 +272,24 @@ export function compareFrameSignatures(
     };
   }
 
-  // 补偿前超阈值但补偿后不超 → 纯光照变化，省掉这次上传
+  // 补偿前超阈值但补偿后不超 → 可能为光照变化
   const rawGlobalDiff =
     diffs.reduce((sum, value) => sum + Math.abs(value), 0) / diffs.length;
 
   if (rawGlobalDiff > FRAME_DIFF_SEND_THRESHOLD) {
+    // 光照自适应：raw 偏移超过当前亮度下的容忍上限时，不能用"纯光照"解释，
+    // 应视为真实场景切换（避免强光/剧烈抖动被误判为光照而漏检）。
+    const tolerance = resolveIlluminationTolerance(meanLuma(current));
+
+    if (rawGlobalDiff > tolerance) {
+      return {
+        shouldSend: true,
+        globalDiff,
+        changedCells,
+        reason: "global-change",
+      };
+    }
+
     return {
       shouldSend: false,
       globalDiff,

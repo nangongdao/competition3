@@ -8,6 +8,34 @@
       content="AI visual dialogue assistant contest project"
     />
     <title>AI Visual Dialogue Assistant</title>
+    <script>
+      // M2.2 无闪烁主题初始化：在首帧前同步应用 data-theme，
+      // 避免 React 挂载前出现默认/暗色闪烁。
+      (function () {
+        try {
+          var stored = window.localStorage.getItem(
+            "assistant-theme-preference-v1",
+          );
+          var preference = stored ? JSON.parse(stored) : "system";
+          var dark = false;
+          if (preference === "dark") {
+            dark = true;
+          } else if (preference === "light") {
+            dark = false;
+          } else if (
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+          ) {
+            dark = true;
+          }
+          document.documentElement.setAttribute(
+            "data-theme",
+            dark ? "dark" : "light",
+          );
+        } catch (error) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

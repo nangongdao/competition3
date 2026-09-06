@@ -17,6 +17,8 @@ type ProcessSuccess = {
   ok: true;
   signature: FrameSignature;
   buffer: ArrayBuffer;
+  /** 帧处理总耗时（ms），供性能遥测使用。 */
+  processMs: number;
 };
 
 type ProcessFailure = {
@@ -44,6 +46,7 @@ async function processFrame(
   maxWidth: number,
   quality: number,
 ): Promise<void> {
+  const startedAt = performance.now();
   const scale = Math.min(1, maxWidth / bitmap.width);
   const width = Math.round(bitmap.width * scale);
   const height = Math.round(bitmap.height * scale);
@@ -66,12 +69,14 @@ async function processFrame(
   // convertToBlob 是异步的，不阻塞事件循环
   const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
   const buffer = await blob.arrayBuffer();
+  const processMs = performance.now() - startedAt;
 
   postMessage(
     {
       ok: true,
       signature,
       buffer,
+      processMs,
     } satisfies ProcessSuccess,
     [buffer],
   );

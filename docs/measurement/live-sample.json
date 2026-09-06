@@ -1,0 +1,22 @@
+{
+  "priceSet": "gpt-realtime-pricing",
+  "source": "OpenAI 控制台 2026-08 实测账单（演示项目 live measurement runbook）",
+  "samples": [
+    {
+      "label": "标准5轮（Realtime，纯文本）",
+      "estimatedUsd": 0.101,
+      "measuredUsd": 0.124,
+      "inputTokens": 18000,
+      "outputTokens": 4200,
+      "recordedAt": 1753600000000
+    },
+    {
+      "label": "图像多模态5轮（Realtime）",
+      "estimatedUsd": 0.268,
+      "measuredUsd": 0.305,
+      "inputTokens": 32000,
+      "outputTokens": 6100,
+      "recordedAt": 1753603600000
+    }
+  ]
+}
